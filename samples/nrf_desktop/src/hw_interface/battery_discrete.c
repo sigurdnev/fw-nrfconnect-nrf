@@ -11,12 +11,14 @@
 #include <adc.h>
 #include <gpio.h>
 #include <atomic.h>
+#include <spinlock.h>
 
 #include <hal/nrf_saadc.h>
 
 #include "event_manager.h"
 #include "power_event.h"
 #include "battery_event.h"
+#include "usb_event.h"
 
 #define MODULE battery
 #include "module_state_event.h"
@@ -65,6 +67,7 @@ static struct gpio_callback gpio_cb;
 
 static struct k_delayed_work error_check;
 static unsigned int cso_counter;
+static struct k_spinlock lock;
 
 static enum battery_state battery_state = -1;
 static atomic_t active;
@@ -75,10 +78,10 @@ static void error_check_handler(struct k_work *work)
 {
 	unsigned int cnt;
 
-	unsigned int key = irq_lock();
+	k_spinlock_key_t key = k_spin_lock(&lock);
 	cnt = cso_counter;
 	cso_counter = 0;
-	irq_unlock(key);
+	k_spin_unlock(&lock, key);
 
 	enum battery_state state;
 
@@ -112,11 +115,12 @@ static void cs_change(struct device *gpio_dev, struct gpio_callback *cb,
 		return;
 	}
 
+	k_spinlock_key_t key = k_spin_lock(&lock);
 	if (cso_counter == 0) {
 		k_delayed_work_submit(&error_check, ERROR_CHECK_TIMEOUT_MS);
 	}
-
 	cso_counter++;
+	k_spin_unlock(&lock, key);
 }
 
 static int init_adc(void)
@@ -240,6 +244,64 @@ static void battery_lvl_read_fn(struct k_work *work)
 	}
 }
 
+static int cso_pin_control(bool enable)
+{
+	int flags = GPIO_DIR_IN;
+
+	if (enable) {
+		flags |= GPIO_INT | GPIO_INT_EDGE | GPIO_INT_DOUBLE_EDGE;
+
+		if (IS_ENABLED(CONFIG_DESKTOP_BATTERY_CSO_PULL_UP)) {
+			flags |= GPIO_PUD_PULL_UP;
+		} else if (IS_ENABLED(CONFIG_DESKTOP_BATTERY_CSO_PULL_DOWN)) {
+			flags |= GPIO_PUD_PULL_DOWN;
+		}
+	}
+
+	int err = gpio_pin_configure(gpio_dev, CONFIG_DESKTOP_BATTERY_CSO_PIN,
+				     flags);
+	if (err) {
+		LOG_ERR("Cannot configure CSO pin");
+	}
+
+	return err;
+}
+
+static int charging_enable(void)
+{
+	return gpio_pin_write(gpio_dev,
+			      CONFIG_DESKTOP_BATTERY_CHARGE_ENABLE_PIN,
+			      1);
+}
+
+static int charging_disable(void)
+{
+	return gpio_pin_write(gpio_dev,
+			      CONFIG_DESKTOP_BATTERY_CHARGE_ENABLE_PIN,
+			      0);
+}
+
+static int start_battery_state_check(void)
+{
+	int err = gpio_pin_disable_callback(gpio_dev,
+					    CONFIG_DESKTOP_BATTERY_CSO_PIN);
+
+	if (!err) {
+		/* Lock is not needed as interrupt is disabled */
+		cso_counter = 1;
+		k_delayed_work_submit(&error_check, ERROR_CHECK_TIMEOUT_MS);
+
+		err = gpio_pin_enable_callback(gpio_dev,
+					       CONFIG_DESKTOP_BATTERY_CSO_PIN);
+	}
+
+	if (err) {
+		LOG_ERR("Cannot start battery state check");
+	}
+
+	return err;
+}
+
 static int init_fn(void)
 {
 	int err;
@@ -251,14 +313,19 @@ static int init_fn(void)
 		goto error;
 	}
 
-	int flags = GPIO_DIR_IN | GPIO_INT | GPIO_INT_EDGE |
-		    GPIO_INT_DOUBLE_EDGE;
-
-	err = gpio_pin_configure(gpio_dev, CONFIG_DESKTOP_BATTERY_CSO_PIN,
-				 flags);
+	err = gpio_pin_configure(gpio_dev,
+				 CONFIG_DESKTOP_BATTERY_CHARGE_ENABLE_PIN,
+				 GPIO_DIR_OUT);
 	if (err) {
 		goto error;
 	}
+
+	err = charging_disable();
+	if (err) {
+		goto error;
+	}
+
+	err = cso_pin_control(true);
 
 	gpio_init_callback(&gpio_cb, cs_change,
 			   BIT(CONFIG_DESKTOP_BATTERY_CSO_PIN));
@@ -269,11 +336,10 @@ static int init_fn(void)
 
 	k_delayed_work_init(&error_check, error_check_handler);
 
-	cso_counter = 1;
-	k_delayed_work_submit(&error_check, ERROR_CHECK_TIMEOUT_MS);
-
-	err = gpio_pin_enable_callback(gpio_dev,
-				       CONFIG_DESKTOP_BATTERY_CSO_PIN);
+	err = start_battery_state_check();
+	if (err) {
+		goto error;
+	}
 
 	/* Enable battery monitoring */
 	err = gpio_pin_configure(gpio_dev,
@@ -324,12 +390,11 @@ static bool event_handler(const struct event_header *eh)
 		if (!atomic_get(&active)) {
 			atomic_set(&active, true);
 
-			cso_counter = 1;
-			k_delayed_work_submit(&error_check,
-					      ERROR_CHECK_TIMEOUT_MS);
+			int err = cso_pin_control(true);
+			if (!err) {
+				err = start_battery_state_check();
+			}
 
-			int err = gpio_pin_enable_callback(gpio_dev,
-					CONFIG_DESKTOP_BATTERY_CSO_PIN);
 			if (!err) {
 				err = battery_monitor_start();
 			}
@@ -347,8 +412,17 @@ static bool event_handler(const struct event_header *eh)
 	if (is_power_down_event(eh)) {
 		if (atomic_get(&active)) {
 			atomic_set(&active, false);
-			gpio_pin_disable_callback(gpio_dev,
+
+			int err = gpio_pin_disable_callback(gpio_dev,
 					CONFIG_DESKTOP_BATTERY_CSO_PIN);
+
+			if (!err) {
+				err = cso_pin_control(false);
+			}
+
+			if (err) {
+				module_set_state(MODULE_STATE_ERROR);
+			}
 
 			if (adc_async_read_pending) {
 				__ASSERT_NO_MSG(sampling);
@@ -364,6 +438,36 @@ static bool event_handler(const struct event_header *eh)
 		return sampling;
 	}
 
+	if (is_usb_state_event(eh)) {
+		struct usb_state_event *event = cast_usb_state_event(eh);
+		int err;
+
+		switch (event->state) {
+		case USB_STATE_SUSPENDED:
+		case USB_STATE_DISCONNECTED:
+			err = charging_disable();
+			break;
+
+		case USB_STATE_POWERED:
+		case USB_STATE_ACTIVE:
+			err = charging_enable();
+			break;
+
+		default:
+			/* Ignore */
+			err = 0;
+			break;
+		}
+		if (!err) {
+			err = start_battery_state_check();
+		}
+		if (err) {
+			module_set_state(MODULE_STATE_ERROR);
+		}
+
+		return false;
+	}
+
 	/* If event is unhandled, unsubscribe. */
 	__ASSERT_NO_MSG(false);
 
@@ -373,3 +477,4 @@ EVENT_LISTENER(MODULE, event_handler);
 EVENT_SUBSCRIBE(MODULE, module_state_event);
 EVENT_SUBSCRIBE_EARLY(MODULE, power_down_event);
 EVENT_SUBSCRIBE(MODULE, wake_up_event);
+EVENT_SUBSCRIBE(MODULE, usb_state_event);

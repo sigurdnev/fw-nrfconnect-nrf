@@ -12,11 +12,14 @@
 #include "power_event.h"
 #include "led_event.h"
 
+#include "leds_def.h"
+
 #define MODULE leds
 #include "module_state_event.h"
 
 #include <logging/log.h>
 LOG_MODULE_REGISTER(MODULE, CONFIG_DESKTOP_LED_LOG_LEVEL);
+
 
 struct led {
 	struct device *pwm_dev;
@@ -31,10 +34,8 @@ struct led {
 	struct k_delayed_work work;
 };
 
-extern size_t led_pins[CONFIG_DESKTOP_LED_COUNT]
-		      [CONFIG_DESKTOP_LED_COLOR_COUNT];
-
 static struct led leds[CONFIG_DESKTOP_LED_COUNT];
+
 
 static void pwm_out(struct led *led, struct led_color *color)
 {
@@ -144,10 +145,14 @@ static int leds_init(void)
 static void leds_start(void)
 {
 	for (size_t i = 0; i < ARRAY_SIZE(leds); i++) {
-		int err = device_set_power_state(leds[i].pwm_dev, DEVICE_PM_ACTIVE_STATE);
+#ifdef CONFIG_DEVICE_POWER_MANAGEMENT
+		int err = device_set_power_state(leds[i].pwm_dev,
+						 DEVICE_PM_ACTIVE_STATE,
+						 NULL, NULL);
 		if (err) {
 			LOG_ERR("PWM enable failed");
 		}
+#endif
 		led_mode_update(&leds[i], leds[i].mode);
 	}
 }
@@ -156,10 +161,14 @@ static void leds_stop(void)
 {
 	for (size_t i = 0; i < ARRAY_SIZE(leds); i++) {
 		led_mode_update(&leds[i], LED_MODE_OFF);
-		int err = device_set_power_state(leds[i].pwm_dev, DEVICE_PM_SUSPEND_STATE);
+#ifdef CONFIG_DEVICE_POWER_MANAGEMENT
+		int err = device_set_power_state(leds[i].pwm_dev,
+						 DEVICE_PM_SUSPEND_STATE,
+						 NULL, NULL);
 		if (err) {
 			LOG_ERR("PWM disable failed");
 		}
+#endif
 	}
 }
 

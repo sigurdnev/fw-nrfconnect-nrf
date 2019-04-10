@@ -1,5 +1,5 @@
-cmake_minimum_required(VERSION 3.8.2)
-project(nrf-connect-sdk-doc VERSION ${PROJECT_VERSION} LANGUAGES)
+cmake_minimum_required(VERSION 3.13.1)
+project(nrf-connect-sdk-doc LANGUAGES)
 
 set(ZEPHYR_BASE $ENV{ZEPHYR_BASE})
 get_filename_component(NRF_BASE ${CMAKE_CURRENT_LIST_DIR}../ DIRECTORY)
@@ -144,6 +144,7 @@ add_custom_target(
   KERNELVERSION=${PROJECT_VERSION}
   SRCARCH=x86
   GENERATED_DTS_BOARD_CONF=not_applicable
+  CMAKE_BINARY_DIR=${CMAKE_BINARY_DIR}
   KCONFIG_TURBO_MODE=${KCONFIG_TURBO_MODE}
   KCONFIG_DOC_MODE=1
   ${PYTHON_EXECUTABLE} ${ZEPHYR_BASE}/doc/scripts/genrest.py ${NRF_BASE}/Kconfig.nrf ${NRF_RST_OUT}/doc/nrf/reference/kconfig/

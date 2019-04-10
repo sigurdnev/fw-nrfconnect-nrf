@@ -1,6 +1,7 @@
 // Due to JENKINS-42369 we put these defines outside the pipeline
-def IMAGE_TAG = "ncs-toolchain:1.07"
+def IMAGE_TAG = "ncs-toolchain:1.08"
 def REPO_CI_TOOLS = "https://github.com/zephyrproject-rtos/ci-tools.git"
+def REPO_CI_TOOLS_SHA = "9f4dc0be401c2b1e9b1c647513fb996bd8abd057"
 
 // Function to get the current repo URL, to be propagated to the downstream job
 def getRepoURL() {
@@ -61,9 +62,9 @@ pipeline {
         // Fetch the tools used to checking compliance
         dir("ci-tools") {
           git branch: "master", url: "$REPO_CI_TOOLS"
+	  sh "git checkout ${REPO_CI_TOOLS_SHA}"
         }
-        // Install and initialize west
-        sh "pip3 install --user west==0.5.4"
+        // Initialize west
         sh "west init -l nrf/"
 
         // Checkout
@@ -94,7 +95,7 @@ pipeline {
               }
 
               /* Rename the nrf9160 samples */
-              samples = ['secure_boot']
+              samples = ['spm']
               for(int i=0; i<samples.size(); i++)
               {
                 file_path = "zephyr/sanity-out/nrf9160_pca10090/nrf9160/${samples[i]}/test_build/zephyr/zephyr.hex"

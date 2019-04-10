@@ -16,7 +16,7 @@
 
 #include <autoconf.h>
 /* TODO: remove file when MULTI_IMAGE */
-#include <../bootloader.h>
+#include <bootloader.h>
 #include <linker/sections.h>
 #include <generated_dts_board.h>
 
@@ -169,6 +169,14 @@ SECTIONS
 	KEEP(*(".kinetis_flash_config.*"))
 
 	_vector_end = .;
+
+	#if defined(CONFIG_SB_FIRMWARE_INFO_OFFSET)
+	_firmware_info_start = .;
+	KEEP(*(.firmware_info))
+	_firmware_info_end = .;
+	_firmware_info_size = _firmware_info_end - _firmware_info_start;
+	#endif
+
 	} GROUP_LINK_IN(ROMABLE_REGION)
 
 #ifdef CONFIG_CODE_DATA_RELOCATION
@@ -243,6 +251,11 @@ SECTIONS
 
 #include <linker/priv_stacks-rom.ld>
 #include <linker/kobject-rom.ld>
+
+	. = ALIGN(4);
+	_ext_abis_start = .;
+	KEEP(*(.ext_abis))
+	_ext_abis_size = ABSOLUTE((. - _ext_abis_start) / 4);
 
 	/*
 	 * For XIP images, in order to avoid the situation when __data_rom_start

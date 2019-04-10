@@ -223,6 +223,7 @@ static void broadcast_subscription_change(void)
 
 static void device_status(enum usb_dc_status_code cb_status, const u8_t *param)
 {
+	static enum usb_state before_suspend;
 	enum usb_state new_state = state;
 
 	switch (cb_status) {
@@ -239,36 +240,35 @@ static void device_status(enum usb_dc_status_code cb_status, const u8_t *param)
 		break;
 
 	case USB_DC_CONFIGURED:
-		__ASSERT_NO_MSG(state == USB_STATE_POWERED);
+		__ASSERT_NO_MSG(state != USB_STATE_DISCONNECTED);
 		new_state = USB_STATE_ACTIVE;
 		break;
 
 	case USB_DC_RESET:
-		if (state == USB_STATE_DISCONNECTED) {
-			LOG_WRN("USB_DC_RESET when USB is disconnected");
+		__ASSERT_NO_MSG(state != USB_STATE_DISCONNECTED);
+		if (state == USB_STATE_SUSPENDED) {
+			LOG_WRN("USB reset in suspended state, ignoring");
+		} else {
+			new_state = USB_STATE_POWERED;
 		}
-		new_state = USB_STATE_POWERED;
 		break;
 
 	case USB_DC_SUSPEND:
 		__ASSERT_NO_MSG(state != USB_STATE_DISCONNECTED);
+		before_suspend = state;
 		new_state = USB_STATE_SUSPENDED;
-		/* Not supported yet */
 		LOG_WRN("USB suspend");
 		break;
 
 	case USB_DC_RESUME:
 		__ASSERT_NO_MSG(state == USB_STATE_SUSPENDED);
-		new_state = USB_STATE_POWERED;
-		/* Not supported yet */
+		new_state = before_suspend;
 		LOG_WRN("USB resume");
 		break;
 
 	case USB_DC_SET_HALT:
-		/* fall through */
 	case USB_DC_CLEAR_HALT:
-		/* Not supported */
-		__ASSERT_NO_MSG(false);
+		/* Ignore */
 		break;
 
 	case USB_DC_ERROR:

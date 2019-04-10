@@ -14,6 +14,10 @@
  * @brief Nordic UART (NUS) GATT Service API.
  */
 
+#include <zephyr/types.h>
+#include <bluetooth/conn.h>
+#include <bluetooth/uuid.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -39,8 +43,7 @@ typedef void (*nus_received_cb_t)(struct bt_conn *conn,
 				  const u8_t *const data, u16_t len);
 
 /** @brief Callback type for data sent. */
-typedef void (*nus_sent_cb_t)(struct bt_conn *conn,
-			      const u8_t *data, u16_t len);
+typedef void (*nus_sent_cb_t)(struct bt_conn *conn);
 
 /** @brief Pointers to the callback functions for service events. */
 struct bt_gatt_nus_cb {

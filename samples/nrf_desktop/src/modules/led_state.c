@@ -17,40 +17,69 @@
 LOG_MODULE_REGISTER(MODULE, CONFIG_DESKTOP_LED_STATE_LOG_LEVEL);
 
 #include "led_state.h"
+#include "led_state_def.h"
 
 
-static bool error;
+static enum led_system_state system_state = LED_SYSTEM_STATE_IDLE;
+
 static bool connected;
-static bool charging;
+static enum peer_operation peer_op = PEER_OPERATION_CANCEL;
+static u8_t cur_peer_id;
+static u8_t tmp_peer_id;
 
-static void set_leds(void)
+static void load_peer_state_led(void)
 {
-	enum system_state state = SYSTEM_STATE_ERROR;
+	enum led_peer_state state = LED_PEER_STATE_DISCONNECTED;
+	u8_t peer_id = cur_peer_id;
 
-	if (!error) {
-		if (!connected && !charging) {
-			state = SYSTEM_STATE_DISCONNECTED;
-		} else if (connected && !charging) {
-			state = SYSTEM_STATE_CONNECTED;
-		} else if (!connected && charging) {
-			state = SYSTEM_STATE_DISCONNECTED_CHARGING;
-		} else if (connected && charging) {
-			state = SYSTEM_STATE_CONNECTED_CHARGING;
+	switch (peer_op) {
+	case PEER_OPERATION_SELECT:
+		peer_id = tmp_peer_id;
+		state = LED_PEER_STATE_CONFIRM_SELECT;
+		break;
+	case PEER_OPERATION_ERASE:
+		state = LED_PEER_STATE_CONFIRM_ERASE;
+		break;
+	case PEER_OPERATION_CANCEL:
+		if (connected) {
+			state = LED_PEER_STATE_CONNECTED;
 		}
+		break;
+	case PEER_OPERATION_SELECTED:
+	case PEER_OPERATION_ERASED:
+	default:
+		__ASSERT_NO_MSG(false);
+		break;
 	}
 
-	const struct led_config *cfg = led_config[state];
+	struct led_event *event = new_led_event();
 
-	for (size_t i = 0; i < CONFIG_DESKTOP_LED_COUNT; i++) {
-		struct led_event *event = new_led_event();
+	event->led_id = led_map[LED_ID_PEER_STATE];
+	event->mode   = led_peer_state_effect[state].mode;
+	event->period = led_peer_state_effect[state].period;
+	event->color  = led_peer_state_color[peer_id];
+	EVENT_SUBMIT(event);
+}
 
-		if (event) {
-			event->led_id = i;
-			event->mode = cfg[i].mode;
-			event->color = cfg[i].color;
-			event->period = cfg[i].period;
-			EVENT_SUBMIT(event);
-		}
+
+static void load_system_state_led(void)
+{
+	struct led_event *event = new_led_event();
+
+	event->led_id = led_map[LED_ID_SYSTEM_STATE];
+	event->mode   = led_system_state_effect[system_state].mode;
+	event->period = led_system_state_effect[system_state].period;
+	event->color  = led_system_state_color[system_state];
+	EVENT_SUBMIT(event);
+}
+
+static void set_system_state_led(enum led_system_state state)
+{
+	__ASSERT_NO_MSG(state < LED_SYSTEM_STATE_COUNT);
+
+	if (system_state != LED_SYSTEM_STATE_ERROR) {
+		system_state = state;
+		load_system_state_led();
 	}
 }
 
@@ -71,10 +100,36 @@ static bool event_handler(const struct event_header *eh)
 			/* Ignore */
 			break;
 		default:
-			error = true;
+			__ASSERT_NO_MSG(false);
 			break;
 		}
-		set_leds();
+		load_peer_state_led();
+
+		return false;
+	}
+
+	if (is_ble_peer_operation_event(eh)) {
+		struct ble_peer_operation_event *event =
+			cast_ble_peer_operation_event(eh);
+
+		switch (event->op)  {
+		case PEER_OPERATION_SELECT:
+			tmp_peer_id = event->arg;
+		case PEER_OPERATION_ERASE:
+			peer_op = event->op;
+			break;
+		case PEER_OPERATION_SELECTED:
+			cur_peer_id = tmp_peer_id;
+			/* Fall through */
+		case PEER_OPERATION_ERASED:
+		case PEER_OPERATION_CANCEL:
+			peer_op = PEER_OPERATION_CANCEL;
+			break;
+		default:
+			__ASSERT_NO_MSG(false);
+			break;
+		}
+		load_peer_state_led();
 
 		return false;
 	}
@@ -84,16 +139,18 @@ static bool event_handler(const struct event_header *eh)
 
 		switch (event->state) {
 		case BATTERY_STATE_CHARGING:
-			charging = true;
+			set_system_state_led(LED_SYSTEM_STATE_CHARGING);
 			break;
 		case BATTERY_STATE_IDLE:
-			charging = false;
+			set_system_state_led(LED_SYSTEM_STATE_IDLE);
+			break;
+		case BATTERY_STATE_ERROR:
+			set_system_state_led(LED_SYSTEM_STATE_ERROR);
 			break;
 		default:
-			error = true;
+			__ASSERT_NO_MSG(false);
 			break;
 		}
-		set_leds();
 
 		return false;
 	}
@@ -102,10 +159,12 @@ static bool event_handler(const struct event_header *eh)
 		struct module_state_event *event = cast_module_state_event(eh);
 
 		if (check_state(event, MODULE_ID(main), MODULE_STATE_READY)) {
-			set_leds();
+			static_assert(LED_ID_COUNT <= CONFIG_DESKTOP_LED_COUNT,
+				      "Not enough LEDs configured");
+			load_system_state_led();
+			load_peer_state_led();
 		} else if (event->state == MODULE_STATE_ERROR) {
-			error = true;
-			set_leds();
+			set_system_state_led(LED_SYSTEM_STATE_ERROR);
 		}
 		return false;
 	}
@@ -119,4 +178,5 @@ static bool event_handler(const struct event_header *eh)
 EVENT_LISTENER(MODULE, event_handler);
 EVENT_SUBSCRIBE(MODULE, module_state_event);
 EVENT_SUBSCRIBE(MODULE, ble_peer_event);
+EVENT_SUBSCRIBE(MODULE, ble_peer_operation_event);
 EVENT_SUBSCRIBE(MODULE, battery_state_event);
