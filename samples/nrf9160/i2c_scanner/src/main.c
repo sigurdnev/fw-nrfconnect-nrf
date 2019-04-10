@@ -6,38 +6,72 @@
 #include <stdlib.h>
 #include <math.h>
 
+
+#include <gpio.h>
+
 #define I2C_ACCEL_WRITE_ADDR 0x32
-#define I2C_ACCEL_READ_ADDR 0x33
+#define I2C_ACCEL_READ_ADDR 0x75
 
 struct device * i2c_accel;
 uint8_t WhoAmI = 0u;
 
-uint8_t init_accelerometer(){
-        i2c_accel = device_get_binding("I2C_2");
-        if (!i2c_accel) {
-		printk("error\r\n");
-                return -1;
-	} else  {
-                i2c_configure(i2c_accel, I2C_SPEED_SET(I2C_SPEED_STANDARD));
-                return 0;
-        }
-}
+
+static struct device  *led_port;
+
+#ifdef CONFIG_SOC_NRF9160
+#define I2C_DEV "I2C_3"
+#else
+#define I2C_DEV "I2C_1"
+#endif
+
 
 void main(void)
 {
-        printk("Hello, World!\r\n");
-        init_accelerometer();
+	struct device *i2c_dev;
+	
+	k_sleep(500);
 
-	while (1) {
-                printk("loop head\r\n");
+	printk("Starting i2c scanner...\n");
 
-                if (i2c_reg_read_byte(i2c_accel, I2C_ACCEL_READ_ADDR, 0x0F, WhoAmI) != 0) {
-                        printk("Error on i2c_read()\n");
-                }
-                printk("WhoAmI = %u\r\n", WhoAmI);
-                printk("enter sleep\r\n");
-                k_sleep(1000);
+	i2c_dev = device_get_binding(I2C_DEV);
+	if (!i2c_dev) {
+		printk("I2C: Device driver not found.\n");
+		return;
 	}
+	
+	uint8_t error = 0u;
+	
+	i2c_configure(i2c_dev, I2C_SPEED_SET(I2C_SPEED_STANDARD));
+
+
+	printk("Value of NRF_TWIM3_NS->PSEL.SCL: %ld \n",NRF_TWIM3_NS->PSEL.SCL);
+	printk("Value of NRF_TWIM3_NS->PSEL.SDA: %ld \n",NRF_TWIM3_NS->PSEL.SDA);
+	printk("Value of NRF_TWIM3_NS->FREQUENCY: %ld \n",NRF_TWIM3_NS->FREQUENCY);
+	printk("26738688 -> 100k\n");
+	
+	
+	
+	for (u8_t i = 4; i <= 0x77; i++) {
+		struct i2c_msg msgs[1];
+		u8_t dst = 1;
+
+		/* Send the address to read from */
+		msgs[0].buf = &dst;
+		msgs[0].len = 1U;
+		msgs[0].flags = I2C_MSG_WRITE | I2C_MSG_STOP;
+		
+		error = i2c_transfer(i2c_dev, &msgs[0], 1, i);
+		if (error == 0) {
+			printk("0x%2x FOUND\n", i);
+		}
+		else {
+			//printk("error %d \n", error);
+		}
+		
+		
+	}
+	
+
+	
+	
 }
-
-
