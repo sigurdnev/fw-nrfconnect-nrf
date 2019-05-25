@@ -1,0 +1,1 @@
+west build -b nrf9160_pca10090ns -d build -p && west flash -d build

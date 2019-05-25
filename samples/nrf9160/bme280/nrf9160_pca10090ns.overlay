@@ -1,0 +1,34 @@
+&i2c3 {
+	status = "ok";
+	sda-pin = < 12 >;
+	scl-pin = < 11 >;
+    clock-frequency = <I2C_BITRATE_STANDARD>;  
+	
+	    /* The I2C address could be one of two, here 0x76 is assumed */
+	bme280@76 {
+		compatible = "bosch,bme280";
+		reg = <0x76>;
+		label = "BME280";
+	};
+};
+
+&i2c2 {
+	status = "disabled";
+
+};
+
+&spi3 {
+        status = "disabled";
+        sck-pin = <11>;
+        mosi-pin = <12>;
+        miso-pin = <13>;
+        spi-max-frequency = <8000000>;
+		
+			bme280@0 {
+		compatible = "bosch,bme280";
+		reg = <0>;
+		spi-max-frequency = <8000000>;
+		label = "BME280";
+	};
+};
+
