@@ -30,18 +30,17 @@ Requirements
 
 Building and running
 ********************
+.. |sample path| replace:: :file:`samples/nfc/tag_reader`
 
-This sample can be found under :file:`samples/nfc/tag_reader` in the |NCS| folder structure.
-
-See :ref:`gs_programming` for information about how to build and program the application.
+.. include:: /includes/build_and_run.txt
 
 Testing
 =======
 After programming the sample to your board, you can test it with an NFC-A Type 2 Tag.
 
 1. Connect the Nucleo expansion board to the development kit board.
-#. Connect to the board with a terminal emulator (for example, PuTTY).
-   See :ref:`putty` for the required settings.
+#. |connect_terminal|
+#. Reset the board.
 #. Touch the ST25R3911B NFC Reader with a Type 2 Tag.
 #. Observe the output in the terminal.
    The content of the tag block is printed there.

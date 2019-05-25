@@ -40,8 +40,10 @@ Secure Partition Manager
 To use any of the nRF9160 samples, you must first compile and flash the
 **Secure Partition Manager** sample.
 It provides a reference implementation of a Secure Partition Manager firmware.
-This firmware is required to set up the nRF9160 DK so that it can run
-user applications in the non-secure domain.
+This firmware is required to set up the nRF9160 DK so that it can run user applications in the non-secure domain.
+
+Note that the **Secure Partition Manager** sample is automatically included in the build for the nrf9160_pca10090ns board.
+To disable the automatic inclusion of the **Secure Partition Manager** sample, set the option ``CONFIG_SPM=n`` in the project configuration.
 
 For detailed documentation of the sample, see :ref:`secure_partition_manager`.
 
@@ -74,6 +76,30 @@ It is a non-volatile setting that must be set before activating the modem.
 It disappears when the modem is reset.
 
 For more detailed information, see the `band lock section in the AT Commands reference document`_.
+
+.. _nrf9160_ug_network_mode:
+
+Network mode
+============
+
+The modem supports LTE-M (Cat-M1) and Narrowband Internet of Things (NB-IoT or LTE Cat-NB).
+By default, the modem starts in LTE-M mode.
+
+When using the **LTE Link Control** driver, you can select LTE-M with :option:`CONFIG_LTE_NETWORK_MODE_LTE_M` or NB-IoT with :option:`CONFIG_LTE_NETWORK_MODE_NBIOT`.
+
+To start in NB-IoT mode without the driver, send the following command before starting the modem protocols (by using ``AT+CFUN=1``)::
+
+   AT%XSYSTEMMODE=0,1,0,0
+
+To change the mode at runtime, set the modem to LTE RF OFF state before reconfiguring the mode, then set it back to normal operating mode::
+
+   AT+CFUN=4
+   AT%XSYSTEMMODE=0,1,0,0
+   AT+CFUN=1
+
+If the modem is shut down gracefully before the next boot (by using ``AT+CFUN=0``), it keeps the current setting.
+
+For more detailed information, see the `system mode section in the AT Commands reference document`_.
 
 .. _nrf9160_ug_drivs_libs_samples:
 

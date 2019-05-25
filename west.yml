@@ -17,7 +17,7 @@
 
 west:
   url: https://github.com/zephyrproject-rtos/west
-  revision: master
+  revision: v0.5.8
 
 manifest:
   defaults:
@@ -31,6 +31,8 @@ manifest:
       url-base: https://github.com/zephyrproject-rtos
     - name: throwtheswitch
       url-base: https://github.com/ThrowTheSwitch
+    - name: armmbed
+      url-base: https://github.com/ARMmbed
 
   # The list of external projects for the nRF Connect SDK.
   #
@@ -38,17 +40,16 @@ manifest:
     - name: fw-nrfconnect-zephyr
       path: zephyr
       west-commands: scripts/west-commands.yml
-      revision: 63a3b13c8d0bb01f273c322e6d9ae665a1ff5c44
+      revision: v1.14.99-ncs1
     - name: fw-nrfconnect-mcuboot
       path: mcuboot
-      revision: 6168414cb103f97b016160396ccc88d9ed45d457
+      revision: v1.3.99-ncs1
+    - name: fw-nrfconnect-tinycbor
+      path: modules/lib/tinycbor
+      revision: ef1f9c3d87474ec3570b1f46e91fd4b54a4fb421
     - name: nrfxlib
       path: nrfxlib
-      revision: 45475200c1c89f31d0398574e4657db99dc89940
-    - name: tinycbor
-      path: modules/lib/tinycbor
-      remote: zephyrproject
-      revision: 111f7a215cc4efa49fd03a7835719adca83b4388
+      revision: v0.4.0
     - name: cmock
       path: test/cmock
       revision: c243b9a7a7b3c471023193992b46cf1bd1910450
@@ -57,6 +58,9 @@ manifest:
       path: test/cmock/vendor/unity
       revision: 031f3bbe45f8adf504ca3d13e6f093869920b091
       remote: throwtheswitch
+    - name: mbedtls
+      revision: mbedtls-2.13.1
+      remote: armmbed
 
   self:
     path: nrf

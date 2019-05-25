@@ -3,7 +3,7 @@
 Bluetooth: Throughput
 #####################
 
-The Bluetooth Throughput sample measures *Bluetooth* Low Energy throughput performance.
+The Bluetooth Throughput sample uses the :ref:`throughput_readme` to measure *Bluetooth* Low Energy throughput performance.
 You can use it to determine the maximum throughput, or to experiment with different connection parameters and check their influence on the throughput.
 
 
@@ -77,10 +77,9 @@ Requirements
 
 Building and running
 ********************
+.. |sample path| replace:: :file:`samples/bluetooth/throughput`
 
-This sample can be found under :file:`samples/bluetooth/throughput` in the |NCS| folder structure.
-
-See :ref:`gs_programming` for information about how to build and program the application.
+.. include:: /includes/build_and_run.txt
 
 
 Testing
@@ -88,9 +87,9 @@ Testing
 
 After programming the sample to both boards, test it by performing the following steps:
 
-1. Power on both boards.
-#. Connect to both boards with a terminal emulator (for example, PuTTY).
+1. Connect to both boards with a terminal emulator (for example, PuTTY).
    See :ref:`putty` for the required settings.
+#. Reset both boards.
 #. Observe that the boards establish a connection.
    When they are connected, one of them serves as *tester* and the other one as *peer*.
    The tester outputs the following information::
@@ -190,7 +189,7 @@ For the peer::
 Dependencies
 *************
 
-This sample uses the following nRF Connect SDK libraries:
+This sample uses the following |NCS| libraries:
 
 * :ref:`throughput_readme`
 

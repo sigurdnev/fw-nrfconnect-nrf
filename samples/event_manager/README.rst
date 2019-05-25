@@ -40,10 +40,9 @@ Requirements
 
 Building and running
 ********************
+.. |sample path| replace:: :file:`samples/event_manager`
 
-This sample can be found under :file:`samples/event_manager` in the |NCS| folder structure.
-
-See :ref:`gs_programming` for information about how to build and program the application.
+.. include:: /includes/build_and_run.txt
 
 
 Testing
@@ -51,8 +50,8 @@ Testing
 
 After programming the sample to your board, test it by performing the following steps:
 
-#. Connect to the board with a terminal emulator (for example, PuTTY).
-   See :ref:`putty` for the required settings.
+1. |connect_terminal|
+#. Reset the board.
 #. Observe that output similar to the following is logged on UART::
 
       ***** Booting Zephyr OS v1.13.99-ncs1-4741-g1d6219f *****

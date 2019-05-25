@@ -51,10 +51,9 @@ Button 3:
 
 Building and Running
 ********************
+.. |sample path| replace:: :file:`samples/bluetooth/central_hids`
 
-This sample can be found under :file:`samples/bluetooth/central_hids` in the |NCS| folder structure.
-
-See :ref:`gs_programming` for information about how to build and program the application.
+.. include:: /includes/build_and_run.txt
 
 
 Testing
@@ -66,9 +65,9 @@ After programming the sample to your board, you can test it either by connecting
 Testing with another board
 --------------------------
 
-1. Connect the board that runs this sample to a terminal (for example, PuTTY).
-   See :ref:`putty` for the required settings.
-#. Program the other board with the :ref:`peripheral_hids_keyboard` sample.
+1. |connect_terminal|
+#. Reset the board.
+#. Program the other board with the :ref:`peripheral_hids_keyboard` sample and reset it.
 #. Wait until the HIDS keyboard is detected by the central.
    All detected descriptors are listed.
    In the terminal window, check for information similar to the following::
@@ -149,3 +148,27 @@ Testing with nRF Connect for Desktop
    Change any of the values and note that the board logs the change.
 #. Press Button 2 on the board and observe that the **Protocol Mode** value changes from ``01`` to ``00``.
 #. Press Button 1 and Button 3 and observe that the **Boot Keyboard Output Report** value toggles between ``00`` and ``02``.
+
+Dependencies
+*************
+
+This sample uses the following |NCS| libraries:
+
+* :ref:`hids_c_readme`
+* :ref:`gatt_dm_readme`
+* :ref:`dk_buttons_and_leds_readme`
+* :ref:`nrf_bt_scan_readme`
+
+In addition, it uses the following Zephyr libraries:
+
+* ``include/misc/byteorder.h``
+* ``include/zephyr/types.h``
+* ``lib/libc/minimal/include/errno.h``
+* ``include/misc/printk.h``
+* :ref:`zephyr:bluetooth_api`:
+
+  * ``include/bluetooth/bluetooth.h``
+  * ``include/bluetooth/gatt.h``
+  * ``include/bluetooth/hci.h``
+  * ``include/bluetooth/conn.h``
+  * ``include/bluetooth/uuid.h``

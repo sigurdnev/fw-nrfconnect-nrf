@@ -15,6 +15,8 @@ Before you start
 ****************
 
 Before you can build the documentation, install the |NCS| as described in :ref:`gs_installing`.
+Make sure that you have installed the required :ref:`Python dependencies <additional_deps_win>`.
+
 See the *Installing the documentation processors* section in the :ref:`zephyr:zephyr_doc` developer guide for information about installing the required tools to build the documentation and their supported versions.
 
 .. note::
@@ -50,7 +52,7 @@ Complete the following steps to build the documentation output:
      #. Hold shift and right-click on the new folder.
         Select **Open command window here**.
 
-   * On Linux:
+   * On Linux or macOS:
 
      a. Open a shell window.
      #. Navigate to ``ncs/nrf/doc``.
@@ -73,7 +75,7 @@ Complete the following steps to build the documentation output:
         .. code-block:: console
 
            ..\..\..\zephyr\zephyr-env.cmd
-   * On Linux:
+   * On Linux or macOS:
 
         .. code-block:: console
 

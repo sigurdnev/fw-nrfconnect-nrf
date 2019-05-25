@@ -19,8 +19,25 @@
 
 #include <nrfx.h>
 
+#if USE_PARTITION_MANAGER
+#include <pm_config.h>
+#define NON_SECURE_APP_ADDRESS PM_APP_ADDRESS
+#else
+#define NON_SECURE_APP_ADDRESS DT_FLASH_AREA_IMAGE_0_NONSECURE_OFFSET_0
+#endif /* USE_PARTITION_MANAGER */
+
+/* Size of secure attribution configurable flash region */
+#define FLASH_SECURE_ATTRIBUTION_REGION_SIZE (32*1024)
+#define LAST_SECURE_ADDRESS (NON_SECURE_APP_ADDRESS - 1)
+#define LAST_SECURE_REGION \
+	(LAST_SECURE_ADDRESS / FLASH_SECURE_ATTRIBUTION_REGION_SIZE)
+#define LAST_SECURE_REGION_INDEX \
+	(LAST_SECURE_REGION > 0 ? (LAST_SECURE_REGION - 1) : 0)
+
 /*
- *  * The following security configuration for Flash and SRAM is applied:
+ *  * The security configuration for depends on where the non secure app
+ *  * is placed. All flash regions before the region which contains the
+ *  * non secure app is configured as Secure.
  *
  *                FLASH
  *  1 MB  |---------------------|
@@ -32,12 +49,13 @@
  *        |     Non-Secure      |
  *        |       Flash         |
  *        |                     |
- * 256 kB |---------------------|
+ *  X kB  |---------------------|
  *        |                     |
  *        |     Secure          |
  *        |      Flash          |
  *  0 kB  |---------------------|
  *
+ *  * The security configuration for SRAM is applied:
  *
  *                SRAM
  * 256 kB |---------------------|
@@ -162,17 +180,18 @@ extern int irq_target_state_is_secure(unsigned int irq);
 
 static void spm_config_flash(void)
 {
-	/* Lower 256 kB of flash is allocated to MCUboot (if present)
-	 * and to the Secure firmware image. The rest of flash is
-	 * allocated to Non-Secure firmware image.
+	/* Regions of flash up to and including SPM are configured as Secure.
+	 * The rest of flash is configured as Non-Secure.
 	 */
 	static const u32_t flash_perm[] = {
-		/* Configuration for Regions 0 - 7 (0 - 256 kB) */
-		[0 ... 7] = FLASH_READ | FLASH_WRITE | FLASH_EXEC |
-			    FLASH_LOCK | FLASH_SECURE,
-		/* Configuration for Regions 8 - 31 (256 kB - 1 MB) */
-		[8 ... 31] = FLASH_READ | FLASH_WRITE | FLASH_EXEC |
-			     FLASH_LOCK | FLASH_NONSEC,
+		/* Configuration for Secure Regions */
+		[0 ... LAST_SECURE_REGION_INDEX] =
+			FLASH_READ | FLASH_WRITE | FLASH_EXEC |
+			FLASH_LOCK | FLASH_SECURE,
+		/* Configuration for Non Secure Regions */
+		[(LAST_SECURE_REGION_INDEX + 1) ... 31] =
+			FLASH_READ | FLASH_WRITE | FLASH_EXEC |
+			FLASH_LOCK | FLASH_NONSEC,
 	};
 
 	PRINT("Flash region\t\tDomain\t\tPermissions\n");
@@ -182,7 +201,7 @@ static void spm_config_flash(void)
 
 		NRF_SPU->FLASHREGION[i].PERM = flash_perm[i];
 
-		PRINT("%02u 0x%05x 0x%05x \t", i, 8 * KB(i), 8 * KB(i + 1));
+		PRINT("%02u 0x%05x 0x%05x \t", i, 32 * KB(i), 32 * KB(i + 1));
 		PRINT("%s", flash_perm[i] & FLASH_SECURE ? "Secure\t\t" :
 							   "Non-Secure\t");
 
@@ -216,7 +235,7 @@ static void spm_config_sram(void)
 
 		NRF_SPU->RAMREGION[i].PERM = sram_perm[i];
 
-		PRINT("%02u 0x%05x 0x%05x\t", i, 4 * KB(i), 4 * KB(i + 1));
+		PRINT("%02u 0x%05x 0x%05x\t", i, 8 * KB(i), 8 * KB(i + 1));
 		PRINT("%s", sram_perm[i] & SRAM_SECURE ? "Secure\t\t" :
 							 "Non-Secure\t");
 
@@ -232,6 +251,14 @@ static void spm_config_sram(void)
 static bool usel_or_split(u8_t id)
 {
 	const u32_t perm = NRF_SPU->PERIPHID[id].PERM;
+
+	/* NRF_GPIOTE1_NS needs special handling as its
+	 * peripheral ID for non-secure han incorrect properties
+	 * in the NRF_SPM->PERIPHID[id].perm register.
+	 */
+	if (id == NRFX_PERIPHERAL_ID_GET(NRF_GPIOTE1_NS)) {
+		return true;
+	}
 
 	bool present = (perm & SPU_PERIPHID_PERM_PRESENT_Msk) ==
 		       SPU_PERIPHID_PERM_PRESENT_Msk;
@@ -257,22 +284,16 @@ static int spm_config_peripheral(u8_t id, bool dma_present)
 	 *
 	 * Note: the function assumes that the peripheral ID matches
 	 * the IRQ line.
-	 *
-	 * Note2: NRF_GPIOTE1_NS needs special handling as its
-	 * peripheral ID for non-secure han incorrect properties
-	 * in the NRF_SPM->PERIPHID[id].perm register.
 	 */
-	if (id != NRFX_PERIPHERAL_ID_GET(NRF_GPIOTE1_NS) &&
-	    !usel_or_split(id)) {
-		return -1;
+	NVIC_DisableIRQ(id);
+
+	if (usel_or_split(id)) {
+		NRF_SPU->PERIPHID[id].PERM = PERIPH_PRESENT | PERIPH_NONSEC |
+			(dma_present ? PERIPH_DMA_NOSEP : 0) |
+			PERIPH_LOCK;
 	}
 
-	NVIC_DisableIRQ(id);
-	NRF_SPU->PERIPHID[id].PERM = PERIPH_PRESENT | PERIPH_NONSEC |
-				     (dma_present ? PERIPH_DMA_NOSEP : 0) |
-				     PERIPH_LOCK;
-
-	/* Even for non-present peripherals we force IRQs to be rooted
+	/* Even for non-present peripherals we force IRQs to be routed
 	 * to Non-Secure state.
 	 */
 	irq_target_state_set(id, 0);
@@ -312,6 +333,7 @@ static void spm_config_peripherals(void)
 		PERIPH("NRF_TIMER0", NRF_TIMER0_S, CONFIG_SPM_NRF_TIMER0_NS),
 		PERIPH("NRF_TIMER1", NRF_TIMER1_S, CONFIG_SPM_NRF_TIMER1_NS),
 		PERIPH("NRF_TIMER2", NRF_TIMER2_S, CONFIG_SPM_NRF_TIMER2_NS),
+		PERIPH("NRF_SAADC", NRF_SAADC_S, CONFIG_SPM_NRF_SAADC_NS),
 
 		PERIPH("NRF_GPIOTE1", NRF_GPIOTE1_NS,
 				      CONFIG_SPM_NRF_GPIOTE1_NS),
@@ -362,10 +384,9 @@ static void spm_configure_ns(const tz_nonsecure_setup_conf_t
 	/* Allow SPU to have precedence over (non-existing) ARMv8-M SAU. */
 	tz_sau_configure(0, 1);
 
-#if defined(CONFIG_ARMV7_M_ARMV8_M_FP)
+#if defined(CONFIG_ARMV7_M_ARMV8_M_FP) && defined(CONFIG_SPM_NRF_FPU_NS)
 	/* Allow Non-Secure firmware to use the FPU */
-	SCB->NSACR |=
-		(1UL << SCB_NSACR_CP10_Pos) | (1UL << SCB_NSACR_CP11_Pos);
+	tz_nonsecure_fpu_access_enable();
 #endif /* CONFIG_ARMV7_M_ARMV8_M_FP */
 }
 
@@ -374,9 +395,11 @@ void spm_jump(void)
 	/* Extract initial MSP of the Non-Secure firmware image.
 	 * The assumption is that the MSP is located at VTOR_NS[0].
 	 */
-	u32_t *vtor_ns = (u32_t *)DT_FLASH_AREA_IMAGE_0_NONSECURE_OFFSET_0;
+	u32_t *vtor_ns = (u32_t *)NON_SECURE_APP_ADDRESS;
 
-	PRINT("SPM: MSP_NS %x\n", vtor_ns[0]);
+	PRINT("SPM: NS image at 0x%x\n", (u32_t)vtor_ns);
+	PRINT("SPM: NS MSP at 0x%x\n", vtor_ns[0]);
+	PRINT("SPM: NS reset vector at 0x%x\n", vtor_ns[1]);
 
 	/* Configure Non-Secure stack */
 	tz_nonsecure_setup_conf_t spm_ns_conf = {
@@ -394,7 +417,7 @@ void spm_jump(void)
 	reset_ns = TZ_NONSECURE_FUNC_PTR_CREATE(vtor_ns[1]);
 
 	if (TZ_NONSECURE_FUNC_PTR_IS_NS(reset_ns)) {
-		PRINT("SPM: prepare to jump to Non-Secure image\n");
+		PRINT("SPM: prepare to jump to Non-Secure image.\n");
 
 		/* Note: Move UARTE0 before jumping, if it is
 		 * to be used on the Non-Secure domain.

@@ -28,15 +28,21 @@
 
 .. ### Links to Nordic documentation
 
+.. _`nRF Connect SDK v0.4.0 documentation`: https://developer.nordicsemi.com/nRF_Connect_SDK/doc/0.4.0/nrf/index.html
+
 .. _`nRF Connect SDK v0.3.0 documentation`: https://developer.nordicsemi.com/nRF_Connect_SDK/doc/0.3.0/nrf/index.html
 
 .. _`nRF Connect SDK latest documentation`: https://developer.nordicsemi.com/nRF_Connect_SDK/doc/latest/nrf/index.html
 
-.. _`LTE Link Monitor`: https://www.nordicsemi.com/DocLib/Content/User_Guides/link_monitor/latest/UG/link_monitor/lm_intro
+.. _`LTE Link Monitor`: https://infocenter.nordicsemi.com/topic/ug_link_monitor/UG/link_monitor/lm_intro.html
 
-.. _`nRF9160 DK board control section in the nRF9160 DK User Guide`: https://www.nordicsemi.com/en/DocLib/Content/User_Guides/nrf91_dk/latest/UG/nrf91_DK/hw_description/board_controller
+.. _`nRF9160 DK board control section in the nRF9160 DK User Guide`: https://infocenter.nordicsemi.com/topic/ug_nrf91_dk/UG/nrf91_DK/board_controller.html
 
-.. _`band lock section in the AT Commands reference document`: https://www.nordicsemi.com/DocLib/Content/User_Guides/at_commands/latest/REF/at_commands/mob_termination_ctrl_status/xbandlock
+.. _`band lock section in the AT Commands reference document`: https://infocenter.nordicsemi.com/topic/ref_at_commands/REF/at_commands/mob_termination_ctrl_status/xbandlock.html
+
+.. _`Device programming section in the nRF9160 DK User Guide`: https://infocenter.nordicsemi.com/topic/ug_nrf91_dk/UG/nrf91_DK/mcu_device_programming.html
+
+.. _`system mode section in the AT Commands reference document`: https://infocenter.nordicsemi.com/topic/ref_at_commands/REF/at_commands/mob_termination_ctrl_status/xsystemmode.html
 
 
 
@@ -59,6 +65,7 @@
 .. ### Links to Nordic software
 
 .. _`nRF5 Command Line Tools`:
+.. _`nRF5x Command Line Tools`:
 .. _`nRF5x Command Line Tools Linux 32`:
 .. _`nRF5x Command Line Tools Linux 64`:
 .. _`nRF5x Command Line Tools Windows 32`:
@@ -75,11 +82,19 @@
 
 .. _`nRF Cloud`: https://nrfcloud.com/
 
+.. _`firmware.nrfcloud.com`: https://firmware.nrfcloud.com/
+
 .. _`openSSL`: https://www.openssl.org/
 
 .. _`GNU Arm Embedded Toolchain`: https://developer.arm.com/open-source/gnu-toolchain/gnu-rm/downloads
 
 .. _`J-Link Software and Documentation Pack`: https://www.segger.com/downloads/jlink
+
+.. _`SEGGER Embedded Studio (Nordic Edition) - Windows x86`: http://segger.com/downloads/embedded-studio/embeddedstudio_arm_nordic_win_x86
+.. _`SEGGER Embedded Studio (Nordic Edition) - Windows x64`: http://segger.com/downloads/embedded-studio/embeddedstudio_arm_nordic_win_x64
+.. _`SEGGER Embedded Studio (Nordic Edition) - Mac OS x64`: http://segger.com/downloads/embedded-studio/embeddedstudio_arm_nordic_macos
+.. _`SEGGER Embedded Studio (Nordic Edition) - Linux x86`: http://segger.com/downloads/embedded-studio/embeddedstudio_arm_nordic_linux_x86
+.. _`SEGGER Embedded Studio (Nordic Edition) - Linux x64`: http://segger.com/downloads/embedded-studio/embeddedstudio_arm_nordic_linux_x64
 
 .. _`MCUboot`: https://mcuboot.com
 
@@ -90,6 +105,10 @@
 .. _`CMock`: http://www.throwtheswitch.org/cmock
 
 .. _`Unity`: http://www.throwtheswitch.org/unity
+
+.. _`MCUmgr`: https://github.com/apache/mynewt-mcumgr
+
+.. _`SMP over Bluetooth`: https://github.com/apache/mynewt-mcumgr/blob/master/transport/smp-bluetooth.md
 
 
 
@@ -108,6 +127,8 @@
 .. _`reStructuredText Primer`: http://www.sphinx-doc.org/en/master/usage/restructuredtext/basics.html
 
 .. _`ST25R3911B chip documentation`: https://www.st.com/resource/en/datasheet/st25r3911b.pdf
+
+.. _`TinyCBOR`: https://intel.github.io/tinycbor/current/
 
 
 

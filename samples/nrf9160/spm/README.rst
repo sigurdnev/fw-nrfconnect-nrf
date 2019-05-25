@@ -3,7 +3,7 @@
 nRF9160: Secure Partition Manager
 #################################
 
-The Secure Partition Manager sample provides a reference use of the Secure Partition Manager peripheral.
+The Secure Partition Manager sample provides a reference use of the System Protection Unit peripheral.
 This firmware is required to set up the nRF9160 DK so that it can run user applications in the non-secure domain.
 
 Overview
@@ -30,6 +30,18 @@ Requirements for the application firmware
 
 * The application firmware must be built as a non-secure firmware for the nrf9160_pca10090ns board.
 
+Automatic building of SPM
+=========================
+
+The sample is automatically built by the non-secure applications when the nrf9160_pca10090ns board is used.
+However, it is not a part of the non-secure application.
+
+Instead of flashing SPM and the non-secure application at the same time, you might want to flash them individually.
+To do this, disable the automatic building of SPM by setting the option ``CONFIG_SPM=n`` in the ``prj.conf`` file of the application.
+
+If this results in a single-image build, the start address of the non-secure application will change.
+The security attribution configuration for the flash will change when SPM is not built as a sub-image.
+
 Requirements
 ************
 
@@ -40,12 +52,13 @@ The following development board:
 Building and running
 ********************
 
-This sample can be found under :file:`samples/nrf9160/spm` in the |NCS| folder structure.
+.. |sample path| replace:: :file:`samples/nrf9160/spm`
+
+.. include:: /includes/build_and_run.txt
 
 The sample is built as a secure firmware image for the nrf9160_pca10090 board.
-It can be programmed independently from the non-secure application firmware.
+See `Automatic building of SPM`_ if you want to program it independently from the non-secure application firmware.
 
-See :ref:`gs_programming` for information about how to build and program the application.
 
 Testing
 =======
