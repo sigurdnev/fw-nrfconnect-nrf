@@ -1,0 +1,10 @@
+Set the Regulators in non-secure!
+
+In spm.c
+PERIPH("NRF_REGULATORS", NRF_REGULATORS_S, CONFIG_SPM_NRF_REGULATORS_NS),
+in Kconfig file:
+config SPM_NRF_REGULATORS_NS
+	bool "Regulators is Non-Secure"
+	default y
+
+https://devzone.nordicsemi.com/f/nordic-q-a/47037/nrf9160-system-off-mode-bus-fault-error/188200#188200
