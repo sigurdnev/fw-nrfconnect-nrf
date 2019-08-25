@@ -22,3 +22,7 @@ rsource "profiler/Kconfig"
 rsource "spm/Kconfig"
 
 rsource "fw_metadata/Kconfig"
+
+rsource "debug/Kconfig"
+
+rsource "shell/Kconfig"

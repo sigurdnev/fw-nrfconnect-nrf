@@ -14,7 +14,7 @@
 #include <dk_buttons_and_leds.h>
 #include <lte_lc.h>
 #include <misc/reboot.h>
-#include <bsd.h>
+#include <net/bsdlib.h>
 
 #include "aggregator.h"
 #include "ble.h"
@@ -57,11 +57,11 @@ static bool pattern_recording;
 static struct k_sem user_assoc_sem;
 
 /* Sensor data */
-static struct gps_data nmea_data;
+static struct gps_data gps_data;
 static struct nrf_cloud_sensor_data gps_cloud_data = {
 	.type = NRF_CLOUD_SENSOR_GPS,
 	.tag = 0x1,
-	.data.ptr = nmea_data.str,
+	.data.ptr = gps_data.nmea.buf,
 	.data.len = GPS_NMEA_SENTENCE_MAX_LENGTH,
 };
 static atomic_val_t send_data_enable;
@@ -93,7 +93,7 @@ void error_handler(enum error_type err_type, int err)
 		k_sched_lock();
 		err = lte_lc_power_off();
 		__ASSERT(err == 0, "lte_lc_power_off failed: %d", err);
-		bsd_shutdown();
+		bsdlib_shutdown();
 	}
 
 #if !defined(CONFIG_DEBUG)
@@ -168,7 +168,7 @@ static void gps_trigger_handler(struct device *dev, struct gps_trigger *trigger)
 
 	if (!(button_state & SWITCH_2) && atomic_get(&send_data_enable)) {
 		gps_sample_fetch(dev);
-		gps_channel_get(dev, GPS_CHAN_NMEA, &nmea_data);
+		gps_channel_get(dev, GPS_CHAN_NMEA, &gps_data);
 
 		gps_cloud_data.tag++;
 
@@ -544,7 +544,7 @@ static void gps_init(void)
 	err = gps_sample_fetch(gps_dev);
 	__ASSERT(err == 0, "GPS sample could not be fetched.");
 
-	err = gps_channel_get(gps_dev, GPS_CHAN_NMEA, &nmea_data);
+	err = gps_channel_get(gps_dev, GPS_CHAN_NMEA, &gps_data);
 	__ASSERT(err == 0, "GPS sample could not be retrieved.");
 }
 

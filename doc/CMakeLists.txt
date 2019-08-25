@@ -1,3 +1,8 @@
+#
+# Copyright (c) 2019 Nordic Semiconductor ASA
+#
+# SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+#
 cmake_minimum_required(VERSION 3.13.1)
 project(nrf-connect-sdk-doc LANGUAGES)
 
@@ -123,12 +128,14 @@ set(NRF_EXTRACT_CONTENT_COMMAND
   "*.rst:samples:${NRF_RST_OUT}"
   "*.rst:boards:${NRF_RST_OUT}"
   "*.rst:include:${NRF_RST_OUT}"
+  "*.rst:scripts:${NRF_RST_OUT}"
   "*.rst:applications:${NRF_RST_OUT}/doc/nrf"
   "*.rst:samples:${NRF_RST_OUT}/doc/nrf"
   "*.rst:boards:${NRF_RST_OUT}/doc/nrf"
   "release-notes*.rst:doc:${NRF_RST_OUT}/doc/nrf"
   "changelog.rst:doc:${NRF_RST_OUT}/doc/nrf"
   "*.rst:include:${NRF_RST_OUT}/doc/nrf"
+  "*.rst:scripts:${NRF_RST_OUT}/doc/nrf"
 )
 
 add_custom_target(

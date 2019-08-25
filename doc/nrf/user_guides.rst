@@ -10,7 +10,9 @@ They introduce you to important concepts and guide you through developing your a
    :maxdepth: 2
 
    ug_nrf9160
+   ug_bt_ll_nrfxlib
    ug_esb
-   ug_partition_manager
+   ug_multi_image
    ug_bootloader
    ug_unity_testing
+   ug_downstreams

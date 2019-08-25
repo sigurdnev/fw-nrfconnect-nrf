@@ -58,7 +58,8 @@ static void log_event(const struct event_header *eh)
 		if (pos < 0) {
 			log_buf[0] = '\0';
 		} else if (pos >= sizeof(log_buf)) {
-			static_assert(sizeof(log_buf) >= 2, "Buffer invalid");
+			BUILD_ASSERT_MSG(sizeof(log_buf) >= 2,
+					 "Buffer invalid");
 			log_buf[sizeof(log_buf) - 2] = '~';
 		}
 
@@ -69,8 +70,7 @@ static void log_event(const struct event_header *eh)
 }
 
 static void log_event_progress(const struct event_type *et,
-			       const struct event_listener *el,
-			       bool consumed)
+			       const struct event_listener *el)
 {
 	if (!IS_ENABLED(CONFIG_DESKTOP_EVENT_MANAGER_SHOW_EVENTS) ||
 	    !IS_ENABLED(CONFIG_DESKTOP_EVENT_MANAGER_SHOW_EVENT_HANDLERS) ||
@@ -78,8 +78,18 @@ static void log_event_progress(const struct event_type *et,
 		return;
 	}
 
-	LOG_INF("|\t%s notified%s", el->name,
-		(consumed)?(" (event consumed)"):(""));
+	LOG_INF("|\tnotifying %s", el->name);
+}
+
+static void log_event_consumed(const struct event_type *et)
+{
+	if (!IS_ENABLED(CONFIG_DESKTOP_EVENT_MANAGER_SHOW_EVENTS) ||
+	    !IS_ENABLED(CONFIG_DESKTOP_EVENT_MANAGER_SHOW_EVENT_HANDLERS) ||
+	    !log_is_event_displayed(et)) {
+		return;
+	}
+
+	LOG_INF("|\tevent consumed");
 }
 
 static void log_event_init(void)
@@ -256,9 +266,13 @@ static void event_processor_fn(struct k_work *work)
 				__ASSERT_NO_MSG(el != NULL);
 				__ASSERT_NO_MSG(el->notification != NULL);
 
+				log_event_progress(et, el);
+
 				consumed = el->notification(eh);
 
-				log_event_progress(et, el, consumed);
+				if (consumed) {
+					log_event_consumed(et);
+				}
 			}
 		}
 

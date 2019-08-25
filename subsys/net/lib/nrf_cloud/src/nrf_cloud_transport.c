@@ -88,6 +88,7 @@ static struct nct {
 	struct sockaddr_storage broker;
 	struct mqtt_utf8 dc_tx_endp;
 	struct mqtt_utf8 dc_rx_endp;
+	struct mqtt_utf8 dc_m_endp;
 	u32_t message_id;
 } nct;
 
@@ -146,6 +147,9 @@ static void dc_endpoint_reset(void)
 
 	nct.dc_tx_endp.utf8 = NULL;
 	nct.dc_tx_endp.size = 0;
+
+	nct.dc_m_endp.utf8 = NULL;
+	nct.dc_m_endp.size = 0;
 }
 
 /* Get the next unused message id. */
@@ -168,6 +172,9 @@ static void dc_endpoint_free(void)
 	}
 	if (nct.dc_tx_endp.utf8 != NULL) {
 		nrf_cloud_free(nct.dc_tx_endp.utf8);
+	}
+	if (nct.dc_m_endp.utf8 != NULL) {
+		nrf_cloud_free(nct.dc_m_endp.utf8);
 	}
 	dc_endpoint_reset();
 }
@@ -268,7 +275,7 @@ static int nct_client_id_get(char *id)
 	memcpy(id, NRF_CLOUD_CLIENT_ID, NRF_CLOUD_CLIENT_ID_LEN + 1);
 #endif /* !defined(NRF_CLOUD_CLIENT_ID) */
 
-	LOG_DBG("client_id = %s", id);
+	LOG_DBG("client_id = %s", log_strdup(id));
 
 	return 0;
 }
@@ -287,42 +294,42 @@ static int nct_topics_populate(void)
 	if (ret != NCT_SHADOW_BASE_TOPIC_LEN) {
 		return -ENOMEM;
 	}
-	LOG_DBG("shadow_base_topic: %s", shadow_base_topic);
+	LOG_DBG("shadow_base_topic: %s", log_strdup(shadow_base_topic));
 
 	ret = snprintf(accepted_topic, sizeof(accepted_topic),
 		       NCT_ACCEPTED_TOPIC, client_id_buf);
 	if (ret != NCT_ACCEPTED_TOPIC_LEN) {
 		return -ENOMEM;
 	}
-	LOG_DBG("accepted_topic: %s", accepted_topic);
+	LOG_DBG("accepted_topic: %s", log_strdup(accepted_topic));
 
 	ret = snprintf(rejected_topic, sizeof(rejected_topic),
 		       NCT_REJECTED_TOPIC, client_id_buf);
 	if (ret != NCT_REJECTED_TOPIC_LEN) {
 		return -ENOMEM;
 	}
-	LOG_DBG("rejected_topic: %s", rejected_topic);
+	LOG_DBG("rejected_topic: %s", log_strdup(rejected_topic));
 
 	ret = snprintf(update_delta_topic, sizeof(update_delta_topic),
 		       NCT_UPDATE_DELTA_TOPIC, client_id_buf);
 	if (ret != NCT_UPDATE_DELTA_TOPIC_LEN) {
 		return -ENOMEM;
 	}
-	LOG_DBG("update_delta_topic: %s", update_delta_topic);
+	LOG_DBG("update_delta_topic: %s", log_strdup(update_delta_topic));
 
 	ret = snprintf(update_topic, sizeof(update_topic),
 		       NCT_UPDATE_TOPIC, client_id_buf);
 	if (ret != NCT_UPDATE_TOPIC_LEN) {
 		return -ENOMEM;
 	}
-	LOG_DBG("update_topic: %s", update_topic);
+	LOG_DBG("update_topic: %s", log_strdup(update_topic));
 
 	ret = snprintf(shadow_get_topic, sizeof(shadow_get_topic),
 		       NCT_SHADOW_GET, client_id_buf);
 	if (ret != NCT_SHADOW_GET_LEN) {
 		return -ENOMEM;
 	}
-	LOG_DBG("shadow_get_topic: %s", shadow_get_topic);
+	LOG_DBG("shadow_get_topic: %s", log_strdup(shadow_get_topic));
 
 	return 0;
 }
@@ -708,6 +715,8 @@ int nct_connect(void)
 
 int nct_cc_connect(void)
 {
+	LOG_DBG("nct_cc_connect");
+
 	const struct mqtt_subscription_list subscription_list = {
 		.list = (struct mqtt_topic *)&nct_cc_rx_list,
 		.list_count = ARRAY_SIZE(nct_cc_rx_list),
@@ -719,6 +728,8 @@ int nct_cc_connect(void)
 
 int nct_cc_send(const struct nct_cc_data *cc_data)
 {
+	static u32_t msg_id;
+
 	if (cc_data == NULL) {
 		LOG_ERR("cc_data == NULL");
 		return -EINVAL;
@@ -743,7 +754,7 @@ int nct_cc_send(const struct nct_cc_data *cc_data)
 		publish.message.payload.len = cc_data->data.len;
 	}
 
-	publish.message_id = cc_data->id;
+	publish.message_id = cc_data->id ? cc_data->id : ++msg_id;
 
 	LOG_DBG("mqtt_publish: id=%d opcode=%d len=%d",
 		publish.message_id, cc_data->opcode,
@@ -772,7 +783,8 @@ int nct_cc_disconnect(void)
 }
 
 void nct_dc_endpoint_set(const struct nrf_cloud_data *tx_endp,
-			 const struct nrf_cloud_data *rx_endp)
+			 const struct nrf_cloud_data *rx_endp,
+			 const struct nrf_cloud_data *m_endp)
 {
 	LOG_DBG("nct_dc_endpoint_set");
 
@@ -786,10 +798,16 @@ void nct_dc_endpoint_set(const struct nrf_cloud_data *tx_endp,
 
 	nct.dc_rx_endp.utf8 = (u8_t *)rx_endp->ptr;
 	nct.dc_rx_endp.size = rx_endp->len;
+
+	if (m_endp != NULL) {
+		nct.dc_m_endp.utf8 = (u8_t *)m_endp->ptr;
+		nct.dc_m_endp.size = m_endp->len;
+	}
 }
 
 void nct_dc_endpoint_get(struct nrf_cloud_data *const tx_endp,
-			 struct nrf_cloud_data *const rx_endp)
+			 struct nrf_cloud_data *const rx_endp,
+			 struct nrf_cloud_data *const m_endp)
 {
 	LOG_DBG("nct_dc_endpoint_get");
 
@@ -798,6 +816,11 @@ void nct_dc_endpoint_get(struct nrf_cloud_data *const tx_endp,
 
 	rx_endp->ptr = nct.dc_rx_endp.utf8;
 	rx_endp->len = nct.dc_rx_endp.size;
+
+	if (m_endp != NULL) {
+		m_endp->ptr = nct.dc_m_endp.utf8;
+		m_endp->len = nct.dc_m_endp.size;
+	}
 }
 
 int nct_dc_connect(void)
@@ -856,4 +879,9 @@ void nct_process(void)
 {
 	mqtt_input(&nct.client);
 	mqtt_live();
+}
+
+int nct_socket_get(void)
+{
+	return nct.client.transport.tls.sock;
 }

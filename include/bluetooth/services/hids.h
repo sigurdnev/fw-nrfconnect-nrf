@@ -18,6 +18,7 @@
 extern "C" {
 #endif
 
+#include <bluetooth/gatt_pool.h>
 #include <bluetooth/gatt.h>
 #include <bluetooth/conn_ctx.h>
 
@@ -41,11 +42,9 @@ extern "C" {
 	BT_CONN_CTX_DEF(_name,						       \
 			CONFIG_BT_GATT_HIDS_MAX_CLIENT_COUNT,		       \
 			_BT_GATT_HIDS_CONN_CTX_SIZE_CALC(__VA_ARGS__));	       \
-	static struct bt_gatt_attr					       \
-		CONCAT(_name, _attr_tab)[CONFIG_BT_GATT_HIDS_ATTR_MAX] = { 0 };\
 	static struct bt_gatt_hids _name =				       \
 	{								       \
-		.svc = { .attrs = CONCAT(_name, _attr_tab) },		       \
+		.gp = BT_GATT_POOL_INIT(CONFIG_BT_GATT_HIDS_ATTR_MAX),	       \
 		.conn_ctx = &CONCAT(_name, _ctx_lib),			       \
 	}
 
@@ -125,11 +124,13 @@ typedef void (*bt_gatt_hids_notif_handler_t) (enum bt_gatt_hids_notif_evt evt);
 
 /** @brief HID Report event handler.
  *
- * @param rep  Pointer to the report descriptor.
- * @param conn Pointer to Connection Object.
+ * @param rep	Pointer to the report descriptor.
+ * @param conn	Pointer to Connection Object.
+ * @param write	@c true if handler is called for report write.
  */
-typedef void (*bt_gatt_hids_rep_handler_t) (struct bt_gatt_hids_rep const *rep,
-					    struct bt_conn *conn);
+typedef void (*bt_gatt_hids_rep_handler_t) (struct bt_gatt_hids_rep *rep,
+					    struct bt_conn *conn,
+					    bool write);
 
 /** @brief Input Report.
  */
@@ -344,7 +345,7 @@ struct bt_gatt_hids_init_param {
  */
 struct bt_gatt_hids {
 	/** Descriptor of the service attribute array. */
-	struct bt_gatt_service svc;
+	struct bt_gatt_pool gp;
 
 	/** Input Report collection. */
 	struct bt_gatt_hids_inp_rep_group inp_rep_group;

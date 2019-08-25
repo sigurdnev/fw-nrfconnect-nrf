@@ -55,8 +55,11 @@ extern "C" {
 /**@brief Filters the device short name. */
 #define BT_SCAN_SHORT_NAME_FILTER 0x10
 
+/**@brief Filters the manufacturer data. */
+#define BT_SCAN_MANUFACTURER_DATA_FILTER 0x20
+
 /**@brief Uses the combination of all filters. */
-#define BT_SCAN_ALL_FILTER 0x1F
+#define BT_SCAN_ALL_FILTER 0x3F
 /* @} */
 
 
@@ -87,6 +90,9 @@ enum bt_scan_filter_type {
 
 	/** Filter for appearances. */
 	BT_SCAN_FILTER_TYPE_APPEARANCE,
+
+	/** Filter for manufacturer data. */
+	BT_SCAN_FILTER_TYPE_MANUFACTURER_DATA,
 };
 
 /**@brief Filter information structure.
@@ -122,6 +128,9 @@ struct bt_filter_status {
 
 	/** Appearance filter info. */
 	struct bt_scan_filter_info appearance;
+
+	/** Appearance filter info. */
+	struct bt_scan_filter_info manufacturer_data;
 };
 
 /**@brief Advertising info structure.
@@ -146,6 +155,16 @@ struct bt_scan_short_name {
 	u8_t min_len;
 };
 
+/**@brief A helper structure to set filters for the manufacturer data.
+ */
+struct bt_scan_manufacturer_data {
+	/** Pointer to the manufacturer data. */
+	u8_t *data;
+
+	/** Manufacturer data length. */
+	u8_t data_len;
+};
+
 /**@brief Structure for Scanning Module initialization.
  */
 struct bt_scan_init_param {
@@ -166,29 +185,100 @@ struct bt_scan_init_param {
 	const struct bt_le_conn_param *conn_param;
 };
 
+/**@brief Name filter status structure, used to inform the application
+ *        which name filter is matched.
+ */
+struct bt_scan_name_filter_status {
+	/** Set to true if this type of filter is matched. */
+	bool match;
+
+	/** Pointer to the matched filter name. */
+	const char *name;
+
+	/** Length of the matched name. */
+	u8_t len;
+};
+
+/**@brief Address filter status structure, used to inform the application
+ *        which address filter is matched.
+ */
+struct bt_scan_addr_filter_status {
+	/** Set to true if this type of filter is matched. */
+	bool match;
+
+	/** Pointer to the matched filter address. */
+	const bt_addr_le_t *addr;
+};
+
+/**@brief UUID filter status structure, used to inform the application
+ *        which UUID filters are matched.
+ */
+struct bt_scan_uuid_filter_status {
+	/** Set to true if this type of filter is matched. */
+	bool match;
+
+	/** Array of pointers to the matched UUID filters. */
+	const struct bt_uuid *uuid[CONFIG_BT_SCAN_UUID_CNT];
+
+	/** Matched UUID count. */
+	u8_t count;
+};
+
+/**@brief Appearance filter status structure, used to inform the application
+ *        which appearance filter is matched.
+ */
+struct bt_scan_appearance_filter_status {
+	/** Set to true if this type of filter is matched. */
+	bool match;
+
+	/** Pointer to the matched filter appearance. */
+	const u16_t *appearance;
+};
+
+/**@brief Manufacturer data filter status structure, used to inform the
+ *        application which manufacturer data filter is matched.
+ */
+struct bt_scan_manufacturer_data_filter_status {
+	/** Set to true if this type of filter is matched. */
+	bool match;
+
+	/** Pointer to the matched filter manufacturer data. */
+	const u8_t *data;
+
+	/** Length of the matched manufacturer data. */
+	u8_t len;
+};
+
 /**@brief Structure for setting the filter status.
  *
  * @details This structure is used for sending
  *          filter status to the main application.
+ *          Filter status contains information about which
+ *          kind of filter is matched and also appropriate
+ *          filter data.
+ *
  */
 struct bt_scan_filter_match {
-	/** Set to 1 if name filter is matched. */
-	u8_t name : 1;
+	/** Name filter status data. */
+	struct bt_scan_name_filter_status name;
 
-	/** Set to 1 if address filter is matched. */
-	u8_t address : 1;
+	/** Short name filter status data. */
+	struct bt_scan_name_filter_status short_name;
 
-	/** Set to 1 if uuid filter is matched. */
-	u8_t uuid : 1;
+	/** Address filter status data. */
+	struct bt_scan_addr_filter_status addr;
 
-	/** Set to 1 if appearance filter is matched. */
-	u8_t appearance: 1;
+	/** UUIDs filter status data. */
+	struct bt_scan_uuid_filter_status uuid;
 
-	/** Set to 1 if short name filter is matched. */
-	u8_t short_name : 1;
+	/** Appearance filter status data. */
+	struct bt_scan_appearance_filter_status appearance;
+
+	/** Manufacturer data filter status data. */
+	struct bt_scan_manufacturer_data_filter_status manufacturer_data;
 };
 
-/**@brief Structure contains device data needed to establish
+/**@brief Structure containing device data needed to establish
  *        connection and advertising information.
  */
 struct bt_scan_device_info {
@@ -262,7 +352,6 @@ struct bt_scan_cb {
  * @param cb Callback struct.
  */
 void bt_scan_cb_register(struct bt_scan_cb *cb);
-
 
 /**@brief Function for initializing the Scanning Module.
  *

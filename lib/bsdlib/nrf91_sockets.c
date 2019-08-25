@@ -21,6 +21,7 @@ LOG_MODULE_REGISTER(nrf91_sockets);
 #include <bsd_os.h>
 #include <errno.h>
 #include <init.h>
+#include <net/net_offload.h>
 #include <net/socket_offload.h>
 #include <nrf_socket.h>
 #include <zephyr.h>
@@ -530,14 +531,24 @@ static int nrf91_socket_offload_setsockopt(int sd, int level, int optname,
 	int retval;
 	int nrf_level;
 	int nrf_optname;
+	struct nrf_timeval nrf_rcvtimeo;
+	void *nrf_optval = (void *)optval;
+	nrf_socklen_t nrf_optlen = optlen;
 
 	if (z_to_nrf_level(level, &nrf_level) < 0)
 		goto error;
 	if (z_to_nrf_optname(level, optname, &nrf_optname) < 0)
 		goto error;
 
-	retval = nrf_setsockopt(sd, nrf_level, nrf_optname, optval,
-				(nrf_socklen_t)optlen);
+	if ((level == SOL_SOCKET) && (optname == SO_RCVTIMEO)) {
+		nrf_rcvtimeo.tv_sec = ((struct timeval *)optval)->tv_sec;
+		nrf_rcvtimeo.tv_usec = ((struct timeval *)optval)->tv_usec;
+		nrf_optval = &nrf_rcvtimeo;
+		nrf_optlen = sizeof(struct nrf_timeval);
+	}
+
+	retval = nrf_setsockopt(sd, nrf_level, nrf_optname, nrf_optval,
+				nrf_optlen);
 
 	return retval;
 
@@ -553,21 +564,42 @@ static int nrf91_socket_offload_getsockopt(int sd, int level, int optname,
 	int retval;
 	int nrf_level;
 	int nrf_optname;
+	struct nrf_timeval nrf_rcvtimeo = {0, 0};
+	void *nrf_optval = optval;
+	nrf_socklen_t nrf_optlen = (nrf_socklen_t)*optlen;
 
 	if (z_to_nrf_level(level, &nrf_level) < 0)
 		goto error;
 	if (z_to_nrf_optname(level, optname, &nrf_optname) < 0)
 		goto error;
 
-	retval = nrf_getsockopt(sd, nrf_level, nrf_optname, optval,
-				(nrf_socklen_t *)optlen);
+	if ((level == SOL_SOCKET) && (optname == SO_RCVTIMEO)) {
+		nrf_optval = &nrf_rcvtimeo;
+		nrf_optlen = sizeof(struct nrf_timeval);
+	}
 
-	if ((retval == 0) && optval &&
-	    (level == SOL_SOCKET) && (optname == SO_ERROR)) {
-		/* Use bsd_os_errno_set() to translate from nRF error
-		 * to native error. */
-		bsd_os_errno_set(*(int *)optval);
-		*(int *)optval = errno;
+	retval = nrf_getsockopt(sd, nrf_level, nrf_optname, nrf_optval,
+				&nrf_optlen);
+
+
+	if ((retval == 0) && (optval != NULL)) {
+		*optlen = nrf_optlen;
+
+		if (level == SOL_SOCKET) {
+			if (optname == SO_ERROR) {
+				/* Use bsd_os_errno_set() to translate from nRF
+				 * error to native error.
+				 */
+				bsd_os_errno_set(*(int *)optval);
+				*(int *)optval = errno;
+			} else if (optname == SO_RCVTIMEO) {
+				((struct timeval *)optval)->tv_sec =
+					nrf_rcvtimeo.tv_sec;
+				((struct timeval *)optval)->tv_usec =
+					nrf_rcvtimeo.tv_usec;
+				*optlen = sizeof(struct timeval);
+			}
+		}
 	}
 
 	return retval;
@@ -690,6 +722,9 @@ static inline int nrf91_socket_offload_poll(struct pollfd *fds, int nfds,
 		}
 		if (tmp[i].returned & NRF_POLLNVAL) {
 			fds[i].revents |= POLLNVAL;
+		}
+		if (tmp[i].returned & NRF_POLLHUP) {
+			fds[i].revents |= POLLHUP;
 		}
 	}
 
@@ -845,15 +880,42 @@ static const struct socket_offload nrf91_socket_offload_ops = {
 	.fcntl = nrf91_socket_offload_fcntl,
 };
 
+/* Create a network interface for nRF91 */
+
 static int nrf91_bsdlib_socket_offload_init(struct device *arg)
 {
 	ARG_UNUSED(arg);
 
-	socket_offload_register(&nrf91_socket_offload_ops);
-
 	return 0;
 }
 
-SYS_INIT(nrf91_bsdlib_socket_offload_init, APPLICATION,
-	 CONFIG_KERNEL_INIT_PRIORITY_DEFAULT);
+/* Placeholders, until Zepyr IP stack updated to handle a NULL net_offload.
+ * Socket offloading is used, hece we will not use this API, yet it's still
+ * needed to create this structure.
+ */
+static struct net_offload nrf91_net_offload = { 0 };
+
+static struct nrf91_socket_iface_data {
+	struct net_if *iface;
+} nrf91_socket_iface_data;
+
+static void nrf91_socket_iface_init(struct net_if *iface)
+{
+	nrf91_socket_iface_data.iface = iface;
+
+	iface->if_dev->offload = &nrf91_net_offload;
+
+	socket_offload_register(&nrf91_socket_offload_ops);
+}
+
+static struct net_if_api nrf91_if_api = {
+	.init = nrf91_socket_iface_init,
+};
+
+/* TODO Get the actual MTU for the nRF91 LTE link. */
+NET_DEVICE_OFFLOAD_INIT(nrf91_socket, "nrf91_socket",
+			nrf91_bsdlib_socket_offload_init,
+			&nrf91_socket_iface_data, NULL,
+			0, &nrf91_if_api, 1280);
+
 #endif

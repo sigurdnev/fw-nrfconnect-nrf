@@ -5,9 +5,12 @@
 
 menu "Application protocols"
 
-rsource "coap/Kconfig"
 rsource "mqtt_socket/Kconfig"
 rsource "nrf_cloud/Kconfig"
 rsource "download_client/Kconfig"
+rsource "fota_download/Kconfig"
+rsource "aws_jobs/Kconfig"
+rsource "aws_fota/Kconfig"
+rsource "cloud/Kconfig"
 
 endmenu

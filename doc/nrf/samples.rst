@@ -38,5 +38,7 @@ In addition, the |NCS| provides the following samples that showcase the use of a
    :glob:
 
    ../../samples/*/README
+   ../../samples/debug/*/README
+   ../../samples/sensor/*/README
 
 For more complex examples, see :ref:`applications`.

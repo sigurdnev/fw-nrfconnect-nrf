@@ -5,17 +5,25 @@
  */
 
 #include <zephyr.h>
-#include <bsd.h>
 #include <nrf_socket.h>
 #include <net/socket.h>
 #include <stdio.h>
 
 #define AT_XSYSTEMMODE "AT\%XSYSTEMMODE=0,0,1,0"
-#define AT_MAGPIO      "AT\%XMAGPIO=1,0,0,1,1,1574,1577"
 #define AT_CFUN        "AT+CFUN=1"
 
+#ifdef CONFIG_BOARD_NRF9160_PCA10090NS
+#define AT_MAGPIO      "AT\%XMAGPIO=1,0,0,1,1,1574,1577"
+#endif
+
 static const char     update_indicator[] = {'\\', '|', '/', '-'};
-static const char     at_commands[][31]  = { AT_XSYSTEMMODE, AT_MAGPIO, AT_CFUN };
+static const char     at_commands[][31]  = {
+				AT_XSYSTEMMODE,
+#ifdef CONFIG_BOARD_NRF9160_PCA10090NS
+				AT_MAGPIO,
+#endif
+				AT_CFUN
+			};
 
 static int            fd;
 
@@ -29,12 +37,12 @@ nrf_gnss_data_frame_t last_fix;
 
 void bsd_recoverable_error_handler(uint32_t error)
 {
-	printf("Err: %lu\n", error);
+	printf("Err: %lu\n", (unsigned long)error);
 }
 
 void bsd_irrecoverable_error_handler(uint32_t error)
 {
-	printf("Irrecoverable: %lu\n", error);
+	printf("Irrecoverable: %lu\n", (unsigned long)error);
 }
 
 static int enable_gps(void)

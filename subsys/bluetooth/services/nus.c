@@ -66,8 +66,10 @@ static ssize_t on_receive(struct bt_conn *conn,
 	return len;
 }
 
-static void on_sent(struct bt_conn *conn)
+static void on_sent(struct bt_conn *conn, void *user_data)
 {
+	ARG_UNUSED(user_data);
+
 	LOG_DBG("Data send, conn %p", conn);
 
 	if (nus_cb.sent_cb) {
@@ -76,8 +78,8 @@ static void on_sent(struct bt_conn *conn)
 }
 
 /* UART Service Declaration */
-static struct bt_gatt_attr attrs[] = {
-	BT_GATT_PRIMARY_SERVICE(BT_UUID_NUS_SERVICE),
+BT_GATT_SERVICE_DEFINE(nus_svc,
+BT_GATT_PRIMARY_SERVICE(BT_UUID_NUS_SERVICE),
 	BT_GATT_CHARACTERISTIC(BT_UUID_NUS_TX,
 			       BT_GATT_CHRC_NOTIFY,
 			       BT_GATT_PERM_READ,
@@ -88,9 +90,7 @@ static struct bt_gatt_attr attrs[] = {
 			       BT_GATT_CHRC_WRITE_WITHOUT_RESP,
 			       BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
 			       NULL, on_receive, NULL),
-};
-
-static struct bt_gatt_service nus_svc = BT_GATT_SERVICE(attrs);
+);
 
 int bt_gatt_nus_init(struct bt_gatt_nus_cb *callbacks)
 {
@@ -99,16 +99,23 @@ int bt_gatt_nus_init(struct bt_gatt_nus_cb *callbacks)
 		nus_cb.sent_cb     = callbacks->sent_cb;
 	}
 
-	return bt_gatt_service_register(&nus_svc);
+	return 0;
 }
 
 int bt_gatt_nus_send(struct bt_conn *conn, const u8_t *data, uint16_t len)
 {
+	struct bt_gatt_notify_params params = {0};
+
+	params.attr = &nus_svc.attrs[2];
+	params.data = data;
+	params.len = len;
+	params.func = on_sent;
+
 	if (!conn) {
 		LOG_DBG("Notification send to all connected peers");
-		return  bt_gatt_notify_cb(NULL, &attrs[2], data, len, on_sent);
+		return  bt_gatt_notify_cb(NULL, &params);
 	} else if (is_notification_enabled(conn, nuslc_ccc_cfg)) {
-		return bt_gatt_notify_cb(conn, &attrs[2], data, len, on_sent);
+		return bt_gatt_notify_cb(conn, &params);
 	} else {
 		return -EINVAL;
 	}

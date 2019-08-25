@@ -1,3 +1,9 @@
+#
+# Copyright (c) 2019 Nordic Semiconductor ASA
+#
+# SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+#
+
 menuconfig BT_SCAN
 	depends on BT_CENTRAL
 	bool "Scan library"
@@ -24,6 +30,12 @@ config BT_SCAN_FILTER_ENABLE
 	default n
 	help
 	  Enabling filters for the Scan library.
+
+config BT_SCAN_MANUFACTURER_DATA_MAX_LEN
+	int "Maximum size for the manufacturer data to search in the advertisement report."
+	default 32
+	help
+	  "Maximum size for the manufacturer data to search in the advertisement report."
 
 if BT_SCAN_FILTER_ENABLE
 
@@ -56,6 +68,12 @@ config BT_SCAN_APPEARANCE_CNT
 	default 0
 	help
 	  Number of appearance filters
+
+config BT_SCAN_MANUFACTURER_DATA_CNT
+	int "Number of manufacturer data filters"
+	default 0
+	help
+	  Number of manufacturer data filters
 endif
 
 if !BT_SCAN_FILTER_ENABLE
@@ -89,6 +107,12 @@ config BT_SCAN_APPEARANCE_CNT
 	default 0
 	help
 	  Number of appearance filters
+
+config BT_SCAN_MANUFACTURER_DATA_CNT
+	int
+	default 0
+	help
+	  Number of manufacturer data filters
 
 endif
 
