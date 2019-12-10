@@ -36,13 +36,13 @@ void main(void)
 {
 	printk("The AT host sample started\n");
 	
-	uint32_t rr = nrf_power_resetreas_get();
+	u32_t rr = nrf_power_resetreas_get(NRF_POWER_NS)
 	printk("RR: 0x%08x", rr);
 	
 	if(rr & POWER_RESETREAS_OFF_Msk)
 	{
 	//Clear all RESETREAS when waking up from System OFF sleep by GPIO.
-	nrf_power_resetreas_clear(0x70017);
+	nrf_power_resetreas_clear(NRF_POWER_NS, 0x70017);
 	}
 	
 	
