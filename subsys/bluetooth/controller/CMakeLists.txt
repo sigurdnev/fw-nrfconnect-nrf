@@ -7,9 +7,9 @@
 zephyr_library()
 
 zephyr_library_sources(
-  multithreading_lock.c
   hci_driver.c
-  )
+  hci_internal.c
+)
 
 zephyr_library_sources_ifdef(
   CONFIG_BT_CTLR_CRYPTO

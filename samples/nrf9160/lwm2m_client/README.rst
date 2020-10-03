@@ -42,13 +42,16 @@ can also receive actuation commands such as buzzer activation and light control.
 Requirements
 ************
 
-* The following development board:
+The sample supports the following development kit:
 
-    * nRF9160 DK board (PCA10090)
+.. table-from-rows:: /includes/sample_board_rows.txt
+   :header: heading
+   :rows: nrf9160dk_nrf9160ns
 
-* .. include:: /includes/spm.txt
+The sample also requires an LwM2M server URL address available on the internet.
+For this sample, the URL address mentioned on the `Leshan Demo Server`_ page is used.
 
-* an LwM2M server IP address available on the internet
+.. include:: /includes/spm.txt
 
 Building and Running
 ********************
@@ -65,7 +68,7 @@ on the nRF9160-DK board using the default configuration :file:`prj.conf`.
 You will need to tell the sample what LwM2M server to use by editing the
 following line in the configuration you've chosen::
 
-    CONFIG_APP_LWM2M_SERVER="{IP address of LwM2M server}"
+    CONFIG_APP_LWM2M_SERVER="leshan.eclipseprojects.io"
 
 Build the sample:
 
@@ -91,11 +94,17 @@ The following are instructions specific to `Leshan Demo Server`_::
 
     Security mode: Pre-Shared Key
 
-    Identity: Client_identity
+    Identity: nrf-{Your Device IMEI}
 
     Key: 000102030405060708090a0b0c0d0e0f
 
 - Start the Zephyr sample
+
+Queue Mode support
+******************
+
+To build the LwM2M Client sample with LwM2M Queue Mode support, build it with the ``-DOVERLAY_CONFIG=overlay-queue.conf`` option.
+See :ref:`cmake_options` for instructions on how to add this option.
 
 Connecting to the LwM2M Server
 ******************************

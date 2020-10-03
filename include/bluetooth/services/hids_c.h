@@ -9,9 +9,9 @@
 
 /**
  * @file
- * @defgroup bt_gatt_hids_c BLE GATT HIDS Client API
+ * @defgroup bt_gatt_hids_c Bluetooth LE GATT HIDS Client API
  * @{
- * @brief API for the BLE GATT HID Service (HIDS) Client.
+ * @brief API for the Bluetooth LE GATT HID Service (HIDS) Client.
  */
 
 #ifdef __cplusplus
@@ -21,34 +21,10 @@ extern "C" {
 #include <bluetooth/gatt.h>
 #include <bluetooth/conn.h>
 #include <bluetooth/gatt_dm.h>
+#include <bluetooth/services/hids.h>
 
 struct bt_gatt_hids_c;
 struct bt_gatt_hids_c_rep_info;
-
-/**
- * @brief Possible values for the Protocol Mode Characteristic value.
- */
-enum bt_gatt_hids_c_pm {
-	/** Boot protocol. */
-	BT_GATT_HIDS_C_PM_BOOT   = 0x00,
-	/** Report protocol. */
-	BT_GATT_HIDS_C_PM_REPORT = 0x01
-};
-
-/**
- * @brief Report types as defined in the Report Reference Characteristic
- *        descriptor.
- */
-enum bt_gatt_hids_c_report_type {
-	/** Reserved value. */
-	BT_GATT_HIDS_C_REPORT_TYPE_RESERVED = 0x00,
-	/** Input Report. */
-	BT_GATT_HIDS_C_REPORT_TYPE_INPUT    = 0x01,
-	/** Output Report. */
-	BT_GATT_HIDS_C_REPORT_TYPE_OUTPUT   = 0x02,
-	/** Feature Report. */
-	BT_GATT_HIDS_C_REPORT_TYPE_FEATURE  = 0x03
-};
 
 /**
  * @brief Callback function that is called when a notification or read response
@@ -57,7 +33,7 @@ enum bt_gatt_hids_c_report_type {
  * This function is called when new data related to the given report object
  * appears.
  * The data size can be obtained from the report object from the
- * @ref bt_gatt_hids_c_rep_info::size field.
+ * @em bt_gatt_hids_c_rep_info::size field.
  *
  * @param hids_c HIDS client object.
  * @param rep    Report object.
@@ -67,10 +43,10 @@ enum bt_gatt_hids_c_report_type {
  * @retval BT_GATT_ITER_STOP     Stop notification.
  * @retval BT_GATT_ITER_CONTINUE Continue notification.
  */
-typedef u8_t (*bt_gatt_hids_c_read_cb)(struct bt_gatt_hids_c *hids_c,
+typedef uint8_t (*bt_gatt_hids_c_read_cb)(struct bt_gatt_hids_c *hids_c,
 				       struct bt_gatt_hids_c_rep_info *rep,
-				       u8_t err,
-				       const u8_t *data);
+				       uint8_t err,
+				       const uint8_t *data);
 
 /**
  * @brief Callback function that is called when a write response is received.
@@ -81,7 +57,7 @@ typedef u8_t (*bt_gatt_hids_c_read_cb)(struct bt_gatt_hids_c *hids_c,
  */
 typedef void (*bt_gatt_hids_c_write_cb)(struct bt_gatt_hids_c *hids_c,
 					struct bt_gatt_hids_c_rep_info *rep,
-					u8_t err);
+					uint8_t err);
 
 /**
  * @brief Callback function that is called when the HIDS client is ready.
@@ -125,8 +101,8 @@ typedef void (*bt_gatt_hids_c_prep_fail_cb)(struct bt_gatt_hids_c *hids_c,
  * @param offset Current data chunk offset.
  */
 typedef void (*bt_gatt_hids_c_map_cb)(struct bt_gatt_hids_c *hids_c,
-				      u8_t err,
-				      const u8_t *data,
+				      uint8_t err,
+				      const uint8_t *data,
 				      size_t size,
 				      size_t offset);
 
@@ -138,55 +114,6 @@ typedef void (*bt_gatt_hids_c_map_cb)(struct bt_gatt_hids_c *hids_c,
  * @param hids_c HIDS client object.
  */
 typedef void (*bt_gatt_hids_c_pm_update_cb)(struct bt_gatt_hids_c *hids_c);
-
-/**
- * @brief RemoteWake flag position.
- *
- * Used in @ref bt_gatt_hids_c_info_val::Flags.
- */
-#define BT_GATT_HIDS_C_INFO_FLAG_RW_POS 0
-
-/**
- * @brief NormallyConnectable flag position.
- *
- * Used in @ref bt_gatt_hids_c_info_val::Flags.
- */
-#define BT_GATT_HIDS_C_INFO_FLAG_NC_POS 1
-
-/**
- * @brief RemoteWake flag value.
- *
- * Used in @ref bt_gatt_hids_c_info_val::Flags.
- */
-#define BT_GATT_HIDS_C_INFO_FLAG_RW (1U << BT_GATT_HIDS_C_INFO_FLAG_RW_POS)
-
-/**
- * @brief NormallyConnectable flag value.
- *
- * Used in @ref bt_gatt_hids_c_info_val::Flags.
- */
-#define BT_GATT_HIDS_C_INFO_FLAG_NC (1U << BT_GATT_HIDS_C_INFO_FLAG_NC_POS)
-
-/**
- * @brief HID Information Characteristic value.
- */
-struct bt_gatt_hids_c_info_val {
-	/**
-	 * BCD representation of the version number of the base USB HID
-	 * Specification implemented by the HID device.
-	 */
-	u16_t bcd_hid;
-	/**
-	 * HID device hardware localization.
-	 * Most hardware is not localized (value 0x00).
-	 */
-	u8_t  b_country_code;
-	/**
-	 * Flags to mark available functions.
-	 * @sa BT_GATT_HIDS_C_INFO_FLAG_RW, BT_GATT_HIDS_C_INFO_FLAG_NC
-	 */
-	u8_t  flags;
-};
 
 /**
  * @brief HIDS client parameters for the initialization function.
@@ -231,17 +158,17 @@ struct bt_gatt_hids_c {
 	/** Connection object. */
 	struct bt_conn *conn;
 	/** HIDS client information. */
-	struct bt_gatt_hids_c_info_val info_val;
+	struct bt_gatt_hids_info info_val;
 	/** Handlers for descriptors */
 	struct bt_gatt_hids_c_handlers {
 		/** Protocol Mode Characteristic value handle. */
-		u16_t pm;
+		uint16_t pm;
 		/** Report Map descriptor handle. */
-		u16_t rep_map;
+		uint16_t rep_map;
 		/** HID Information Characteristic handle. */
-		u16_t info;
+		uint16_t info;
 		/** HID Control Point Characteristic handle. */
-		u16_t cp;
+		uint16_t cp;
 	} handlers;
 	/**
 	 * @brief Callback for HIDS client ready
@@ -282,7 +209,7 @@ struct bt_gatt_hids_c {
 		 * information is read. This structure helps tracking the
 		 * current state of this process.
 		 */
-		u8_t rep_idx;
+		uint8_t rep_idx;
 	} init_repref;
 
 	struct {
@@ -303,11 +230,11 @@ struct bt_gatt_hids_c {
 	/** Array of report information structures. */
 	struct bt_gatt_hids_c_rep_info **rep_info;
 	/** Number of records. */
-	u8_t rep_cnt;
+	uint8_t rep_cnt;
 	/** Current state. */
 	bool ready;
 	/** Current protocol mode. */
-	enum bt_gatt_hids_c_pm pm;
+	enum bt_gatt_hids_pm pm;
 };
 
 /**
@@ -376,7 +303,7 @@ void bt_gatt_hids_c_release(struct bt_gatt_hids_c *hids_c);
  *
  * @note
  * This function disables transfers inside the HIDS client library.
- * It does not abort any pending transfers in the BLE stack.
+ * It does not abort any pending transfers in the Bluetooth LE stack.
  *
  * @param hids_c HIDS client object.
  */
@@ -442,7 +369,7 @@ int bt_gatt_hids_c_rep_read(struct bt_gatt_hids_c *hids_c,
 int bt_gatt_hids_c_rep_write(struct bt_gatt_hids_c *hids_c,
 			     struct bt_gatt_hids_c_rep_info *rep,
 			     bt_gatt_hids_c_write_cb func,
-			     const void *data, u8_t length);
+			     const void *data, uint8_t length);
 
 /**
  * @brief Send a write command addressing the report value descriptor.
@@ -455,13 +382,15 @@ int bt_gatt_hids_c_rep_write(struct bt_gatt_hids_c *hids_c,
  * @param rep    Report object.
  * @param data   Data to be sent.
  * @param length Data size.
+ * @param func   Function to be called when operation is completed.
  *
  * @retval 0 If the operation was successful.
  *           Otherwise, a (negative) error code is returned.
  */
 int bt_gatt_hids_c_rep_write_wo_rsp(struct bt_gatt_hids_c *hids_c,
 				    struct bt_gatt_hids_c_rep_info *rep,
-				    const void *data, u8_t length);
+				    const void *data, uint8_t length,
+				    bt_gatt_hids_c_write_cb func);
 
 /**
  * @brief Subscribe to report notifications.
@@ -517,7 +446,7 @@ int bt_gatt_hids_c_rep_unsubscribe(struct bt_gatt_hids_c *hids_c,
 int bt_gatt_hids_c_map_read(struct bt_gatt_hids_c *hids_c,
 			    bt_gatt_hids_c_map_cb func,
 			    size_t offset,
-			    s32_t timeout);
+			    k_timeout_t timeout);
 
 /**
  * @brief Read the current protocol mode from the server.
@@ -541,7 +470,8 @@ int bt_gatt_hids_c_map_read(struct bt_gatt_hids_c *hids_c,
  * @retval 0 If the operation was successful.
  *           Otherwise, a (negative) error code is returned.
  */
-int bt_gatt_hids_c_pm_update(struct bt_gatt_hids_c *hids_c, s32_t timeout);
+int bt_gatt_hids_c_pm_update(struct bt_gatt_hids_c *hids_c,
+	k_timeout_t timeout);
 
 /**
  * @brief Get the current protocol mode.
@@ -553,7 +483,7 @@ int bt_gatt_hids_c_pm_update(struct bt_gatt_hids_c *hids_c, s32_t timeout);
  *
  * @return Current protocol mode.
  */
-enum bt_gatt_hids_c_pm bt_gatt_hids_c_pm_get(
+enum bt_gatt_hids_pm bt_gatt_hids_c_pm_get(
 	const struct bt_gatt_hids_c *hids_c);
 
 /**
@@ -573,7 +503,7 @@ enum bt_gatt_hids_c_pm bt_gatt_hids_c_pm_get(
  *           Otherwise, a (negative) error code is returned.
  */
 int bt_gatt_hids_c_pm_write(struct bt_gatt_hids_c *hids_c,
-			    enum bt_gatt_hids_c_pm pm);
+			    enum bt_gatt_hids_pm pm);
 
 /**
  * @brief Suspend the device.
@@ -624,7 +554,7 @@ struct bt_conn *bt_gatt_hids_c_conn(const struct bt_gatt_hids_c *hids_c);
  *
  * @return Pointer to the decoded HID information structure.
  */
-const struct bt_gatt_hids_c_info_val *bt_gatt_hids_c_conn_info_val(
+const struct bt_gatt_hids_info *bt_gatt_hids_c_conn_info_val(
 	const struct bt_gatt_hids_c *hids_c);
 
 /**
@@ -703,8 +633,8 @@ struct bt_gatt_hids_c_rep_info *bt_gatt_hids_c_rep_next(
  */
 struct bt_gatt_hids_c_rep_info *bt_gatt_hids_c_rep_find(
 	struct bt_gatt_hids_c *hids_c,
-	enum bt_gatt_hids_c_report_type type,
-	u8_t id);
+	enum bt_gatt_hids_report_type type,
+	uint8_t id);
 
 /**
  * @brief Set user data in report.
@@ -731,7 +661,7 @@ void *bt_gatt_hids_c_rep_user_data(const struct bt_gatt_hids_c_rep_info *rep);
  *
  * @return Report identifier.
  */
-u8_t bt_gatt_hids_c_rep_id(const struct bt_gatt_hids_c_rep_info *rep);
+uint8_t bt_gatt_hids_c_rep_id(const struct bt_gatt_hids_c_rep_info *rep);
 
 
 /**
@@ -741,7 +671,7 @@ u8_t bt_gatt_hids_c_rep_id(const struct bt_gatt_hids_c_rep_info *rep);
  *
  * @return Report type.
  */
-enum bt_gatt_hids_c_report_type bt_gatt_hids_c_rep_type(
+enum bt_gatt_hids_report_type bt_gatt_hids_c_rep_type(
 	const struct bt_gatt_hids_c_rep_info *rep);
 
 /**

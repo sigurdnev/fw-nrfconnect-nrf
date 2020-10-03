@@ -13,11 +13,6 @@
 #include <logging/log.h>
 LOG_MODULE_REGISTER(hids_c, CONFIG_BT_GATT_HIDS_C_LOG_LEVEL);
 
-/* Suspend value for Control Point  */
-#define BT_GATT_HIDS_C_CP_SUSPEND      0x00
-/* Exit suspend value for Control Point */
-#define BT_GATT_HIDS_C_CP_EXIT_SUSPEND 0x01
-
 /* Real report structure definition */
 struct bt_gatt_hids_c_rep_info {
 	/** HIDS client object
@@ -36,16 +31,16 @@ struct bt_gatt_hids_c_rep_info {
 	void *user_data;
 	/** Handlers */
 	struct {
-		u16_t ref; /**< Report Reference handler */
-		u16_t val; /**< Value handler            */
-		u16_t ccc; /**< CCC handler (Input)      */
+		uint16_t ref; /**< Report Reference handler */
+		uint16_t val; /**< Value handler            */
+		uint16_t ccc; /**< CCC handler (Input)      */
 	} handlers;
 	/** Report reference information */
 	struct {
-		u8_t id;                              /**< Report identifier */
-		enum bt_gatt_hids_c_report_type type; /**< Report type       */
+		uint8_t id;                              /**< Report identifier */
+		enum bt_gatt_hids_report_type type; /**< Report type       */
 	} ref;
-	u8_t size; /**< The size of the value */
+	uint8_t size; /**< The size of the value */
 };
 
 /* Memory slab used for reports */
@@ -114,11 +109,11 @@ static void rep_free(struct bt_gatt_hids_c_rep_info **repp)
 static int rep_new(struct bt_gatt_hids_c *hids_c,
 		   struct bt_gatt_hids_c_rep_info **repp,
 		   const struct bt_gatt_dm *dm,
-		   const struct bt_gatt_attr *rep_chrc)
+		   const struct bt_gatt_dm_attr *rep_chrc)
 {
 	struct bt_gatt_hids_c_rep_info *rep;
 	const struct bt_gatt_chrc *chrc_val;
-	const struct bt_gatt_attr *gatt_desc;
+	const struct bt_gatt_dm_attr *gatt_desc;
 
 	rep = rep_alloc();
 	if (!rep) {
@@ -132,10 +127,10 @@ static int rep_new(struct bt_gatt_hids_c *hids_c,
 	/* Guess the type depending on the flags */
 	if (chrc_val->properties & BT_GATT_CHRC_WRITE_WITHOUT_RESP) {
 		/* Only Out Report has this properties */
-		rep->ref.type = BT_GATT_HIDS_C_REPORT_TYPE_OUTPUT;
+		rep->ref.type = BT_GATT_HIDS_REPORT_TYPE_OUTPUT;
 	} else if (chrc_val->properties & BT_GATT_CHRC_NOTIFY) {
 		/* Only In Report has this properties */
-		rep->ref.type = BT_GATT_HIDS_C_REPORT_TYPE_INPUT;
+		rep->ref.type = BT_GATT_HIDS_REPORT_TYPE_INPUT;
 		/* And it has CCC descriptor */
 		gatt_desc = bt_gatt_dm_desc_by_uuid(dm, rep_chrc,
 						    BT_UUID_GATT_CCC);
@@ -147,7 +142,7 @@ static int rep_new(struct bt_gatt_hids_c *hids_c,
 		rep->handlers.ccc = gatt_desc->handle;
 	} else {
 		/* It has to be feature report */
-		rep->ref.type = BT_GATT_HIDS_C_REPORT_TYPE_FEATURE;
+		rep->ref.type = BT_GATT_HIDS_REPORT_TYPE_FEATURE;
 	}
 	/* Get common report handlers */
 	gatt_desc = bt_gatt_dm_desc_by_uuid(dm, rep_chrc,
@@ -223,12 +218,12 @@ static void repptr_array_free(struct bt_gatt_hids_c_rep_info **repp)
  *
  * @return Handle of the characteristic value of 0 if it cannot be found.
  */
-static u16_t chrc_value_handle_by_uuid(struct bt_gatt_dm *dm,
+static uint16_t chrc_value_handle_by_uuid(struct bt_gatt_dm *dm,
 				       struct bt_gatt_hids_c *hids_c,
 				       const struct bt_uuid *uuid)
 {
-	const struct bt_gatt_attr *gatt_chrc;
-	const struct bt_gatt_attr *gatt_desc;
+	const struct bt_gatt_dm_attr *gatt_chrc;
+	const struct bt_gatt_dm_attr *gatt_desc;
 
 	gatt_chrc = bt_gatt_dm_char_by_uuid(dm, uuid);
 	if (!gatt_chrc) {
@@ -292,9 +287,9 @@ static void hids_prep_error(struct bt_gatt_hids_c *hids_c, int err)
  * @retval BT_GATT_ITER_STOP     Stop notification
  * @retval BT_GATT_ITER_CONTINUE Continue notification
  */
-static u8_t pm_read_process(struct bt_conn *conn, u8_t err,
+static uint8_t pm_read_process(struct bt_conn *conn, uint8_t err,
 			    struct bt_gatt_read_params *params,
-			    const void *data, u16_t length);
+			    const void *data, uint16_t length);
 
 /**
  * @brief Start protocol mode read
@@ -330,9 +325,9 @@ static int pm_read_start(struct bt_gatt_hids_c *hids_c)
 	return 0;
 }
 
-static u8_t pm_read_process(struct bt_conn *conn, u8_t err,
+static uint8_t pm_read_process(struct bt_conn *conn, uint8_t err,
 			    struct bt_gatt_read_params *params,
-			    const void *data, u16_t length)
+			    const void *data, uint16_t length)
 {
 	struct bt_gatt_hids_c *hids_c;
 
@@ -351,7 +346,7 @@ static u8_t pm_read_process(struct bt_conn *conn, u8_t err,
 		return BT_GATT_ITER_STOP;
 	}
 
-	hids_c->pm = (enum bt_gatt_hids_c_pm)((u8_t *)data)[0];
+	hids_c->pm = (enum bt_gatt_hids_pm)((uint8_t *)data)[0];
 	LOG_DBG("Read PM success: %d", (int)hids_c->pm);
 	hids_mark_ready(hids_c);
 	return BT_GATT_ITER_STOP;
@@ -372,9 +367,9 @@ static u8_t pm_read_process(struct bt_conn *conn, u8_t err,
  * @retval BT_GATT_ITER_STOP     Stop notification
  * @retval BT_GATT_ITER_CONTINUE Continue notification
  */
-static u8_t repref_read_process(struct bt_conn *conn, u8_t err,
+static uint8_t repref_read_process(struct bt_conn *conn, uint8_t err,
 				struct bt_gatt_read_params *params,
-				const void *data, u16_t length);
+				const void *data, uint16_t length);
 
 /**
  * @brief Start Report Reference read
@@ -415,15 +410,15 @@ static int repref_read_start(struct bt_gatt_hids_c *hids_c, size_t rep_idx)
 	return 0;
 }
 
-static u8_t repref_read_process(struct bt_conn *conn, u8_t err,
+static uint8_t repref_read_process(struct bt_conn *conn, uint8_t err,
 				struct bt_gatt_read_params *params,
-				const void *data, u16_t length)
+				const void *data, uint16_t length)
 {
 	int ret;
 	struct bt_gatt_hids_c *hids_c;
 	struct bt_gatt_hids_c_rep_info *rep;
 	size_t rep_idx;
-	const u8_t *bdata = data;
+	const uint8_t *bdata = data;
 
 	hids_c = CONTAINER_OF(params,
 			      struct bt_gatt_hids_c,
@@ -446,7 +441,7 @@ static u8_t repref_read_process(struct bt_conn *conn, u8_t err,
 	}
 
 	rep = hids_c->rep_info[rep_idx];
-	if ((u8_t)rep->ref.type != bdata[1]) {
+	if ((uint8_t)rep->ref.type != bdata[1]) {
 		LOG_ERR("Unexpected report type (%u while expecting %u)",
 			bdata[1], rep->ref.type);
 		hids_prep_error(hids_c, -EINVAL);
@@ -482,9 +477,9 @@ static u8_t repref_read_process(struct bt_conn *conn, u8_t err,
  * @retval BT_GATT_ITER_STOP     Stop notification
  * @retval BT_GATT_ITER_CONTINUE Continue notification
  */
-static u8_t hid_info_read_process(struct bt_conn *conn, u8_t err,
+static uint8_t hid_info_read_process(struct bt_conn *conn, uint8_t err,
 				   struct bt_gatt_read_params *params,
-				   const void *data, u16_t length);
+				   const void *data, uint16_t length);
 
 static int hid_info_read_start(struct bt_gatt_hids_c *hids_c)
 {
@@ -508,12 +503,12 @@ static int hid_info_read_start(struct bt_gatt_hids_c *hids_c)
 	return 0;
 }
 
-static u8_t hid_info_read_process(struct bt_conn *conn, u8_t err,
+static uint8_t hid_info_read_process(struct bt_conn *conn, uint8_t err,
 				   struct bt_gatt_read_params *params,
-				   const void *data, u16_t length)
+				   const void *data, uint16_t length)
 {
 	struct bt_gatt_hids_c *hids_c;
-	const u8_t *bdata = data;
+	const uint8_t *bdata = data;
 
 	hids_c = CONTAINER_OF(params,
 			      struct bt_gatt_hids_c,
@@ -530,7 +525,7 @@ static u8_t hid_info_read_process(struct bt_conn *conn, u8_t err,
 		return BT_GATT_ITER_STOP;
 	}
 
-	hids_c->info_val.bcd_hid = (u16_t)bdata[0] | (((u16_t)bdata[1]) << 8);
+	hids_c->info_val.bcd_hid = (uint16_t)bdata[0] | (((uint16_t)bdata[1]) << 8);
 	hids_c->info_val.b_country_code = bdata[2];
 	hids_c->info_val.flags = bdata[3];
 
@@ -595,12 +590,12 @@ static int post_discovery_start(struct bt_gatt_hids_c *hids_c)
 static int handles_assign_internal(struct bt_gatt_dm *dm,
 				   struct bt_gatt_hids_c *hids_c)
 {
-	const struct bt_gatt_attr *gatt_service_attr =
+	const struct bt_gatt_dm_attr *gatt_service_attr =
 			bt_gatt_dm_service_get(dm);
 	const struct bt_gatt_service_val *gatt_service =
 			bt_gatt_dm_attr_service_val(gatt_service_attr);
-	const struct bt_gatt_attr *gatt_chrc;
-	u16_t handle;
+	const struct bt_gatt_dm_attr *gatt_chrc;
+	uint16_t handle;
 	bool boot_protocol_required;
 	int ret;
 
@@ -662,7 +657,7 @@ static int handles_assign_internal(struct bt_gatt_dm *dm,
 	}
 
 	/* Keyboard boot records */
-	const struct bt_gatt_attr *gatt_chrc_kbd; /* Used temporary */
+	const struct bt_gatt_dm_attr *gatt_chrc_kbd; /* Used temporary */
 
 	gatt_chrc = bt_gatt_dm_char_by_uuid(dm,
 			BT_UUID_HIDS_BOOT_KB_IN_REPORT);
@@ -731,7 +726,7 @@ static int handles_assign_internal(struct bt_gatt_dm *dm,
 		LOG_ERR("Cannot create report pointers array.");
 		return -ENOMEM;
 	}
-	hids_c->rep_cnt = (u8_t)rep_cnt;
+	hids_c->rep_cnt = (uint8_t)rep_cnt;
 
 	/* Process all the records */
 	rep_cnt = 0;
@@ -787,7 +782,7 @@ int bt_gatt_hids_c_handles_assign(struct bt_gatt_dm *dm,
 void bt_gatt_hids_c_release(struct bt_gatt_hids_c *hids_c)
 {
 	if (hids_c->rep_info) {
-		u8_t rep_cnt = hids_c->rep_cnt;
+		uint8_t rep_cnt = hids_c->rep_cnt;
 
 		while (rep_cnt) {
 			rep_free(&(hids_c->rep_info[--rep_cnt]));
@@ -847,9 +842,9 @@ bool bt_gatt_hids_c_ready_check(const struct bt_gatt_hids_c *hids_c)
  * @retval BT_GATT_ITER_STOP     Stop notification
  * @retval BT_GATT_ITER_CONTINUE Continue notification
  */
-static u8_t rep_read_process(struct bt_conn *conn, u8_t err,
+static uint8_t rep_read_process(struct bt_conn *conn, uint8_t err,
 			     struct bt_gatt_read_params *params,
-			     const void *data, u16_t length)
+			     const void *data, uint16_t length)
 {
 	struct bt_gatt_hids_c_rep_info *rep;
 
@@ -864,7 +859,7 @@ static u8_t rep_read_process(struct bt_conn *conn, u8_t err,
 		LOG_WRN("Data size too big, truncating");
 		length = UINT8_MAX;
 	}
-	rep->size = (u8_t)length;
+	rep->size = (uint8_t)length;
 	(void)rep->read_cb(rep->hids_c, rep, 0, data);
 	rep->read_cb = NULL;
 	return BT_GATT_ITER_STOP;
@@ -903,7 +898,7 @@ int bt_gatt_hids_c_rep_read(struct bt_gatt_hids_c *hids_c,
  *  @param err ATT error code.
  *  @param params Write parameters used.
  */
-static void rep_write_process(struct bt_conn *conn, u8_t err,
+static void rep_write_process(struct bt_conn *conn, uint8_t err,
 			      struct bt_gatt_write_params *params)
 {
 	struct bt_gatt_hids_c_rep_info *rep;
@@ -922,7 +917,7 @@ static void rep_write_process(struct bt_conn *conn, u8_t err,
 int bt_gatt_hids_c_rep_write(struct bt_gatt_hids_c *hids_c,
 			     struct bt_gatt_hids_c_rep_info *rep,
 			     bt_gatt_hids_c_write_cb func,
-			     const void *data, u8_t length)
+			     const void *data, uint8_t length)
 {
 	int err;
 
@@ -941,29 +936,62 @@ int bt_gatt_hids_c_rep_write(struct bt_gatt_hids_c *hids_c,
 	err = bt_gatt_write(hids_c->conn, &(rep->write_params));
 	if (err) {
 		rep->write_cb = NULL;
-		return err;
 	}
-	return 0;
+
+	return err;
+}
+
+/**
+ *  @brief Process report write without response
+ *
+ *  @param conn Connection object.
+ *  @param rep_ptr Report object.
+ */
+static void rep_write_wo_rsp_process(struct bt_conn *conn, void *rep_ptr)
+{
+	struct bt_gatt_hids_c_rep_info *rep = rep_ptr;
+
+	if (!rep->write_cb) {
+		LOG_ERR("No write callback present");
+		return;
+	}
+
+	rep->write_cb(rep->hids_c, rep, 0);
+	rep->write_cb = NULL;
 }
 
 int bt_gatt_hids_c_rep_write_wo_rsp(struct bt_gatt_hids_c *hids_c,
 				   struct bt_gatt_hids_c_rep_info *rep,
-				   const void *data, u8_t length)
+				   const void *data, uint8_t length,
+				   bt_gatt_hids_c_write_cb func)
 {
 	int err;
 
-	if (!hids_c || !rep) {
+	if (!hids_c || !rep || !func) {
 		return -EINVAL;
 	}
-	if (rep->ref.type != BT_GATT_HIDS_C_REPORT_TYPE_OUTPUT) {
+
+	if (rep->ref.type != BT_GATT_HIDS_REPORT_TYPE_OUTPUT) {
 		return -ENOTSUP;
 	}
 
-	err = bt_gatt_write_without_response(hids_c->conn,
-					     rep->handlers.val,
-					     data,
-					     length,
-					     false);
+	if (rep->write_cb) {
+		return -EBUSY;
+	}
+
+	rep->write_cb = func;
+
+	err = bt_gatt_write_without_response_cb(hids_c->conn,
+						rep->handlers.val,
+						data,
+						length,
+						false,
+						rep_write_wo_rsp_process,
+						rep);
+	if (err) {
+		rep->write_cb = NULL;
+	}
+
 	return err;
 }
 
@@ -981,9 +1009,9 @@ int bt_gatt_hids_c_rep_write_wo_rsp(struct bt_gatt_hids_c *hids_c,
  * @retval BT_GATT_ITER_STOP     Stop notification
  * @retval BT_GATT_ITER_CONTINUE Continue notification
  */
-static u8_t rep_notify_process(struct bt_conn *conn,
+static uint8_t rep_notify_process(struct bt_conn *conn,
 			       struct bt_gatt_subscribe_params *params,
-			       const void *data, u16_t length)
+			       const void *data, uint16_t length)
 {
 	struct bt_gatt_hids_c_rep_info *rep;
 
@@ -998,7 +1026,13 @@ static u8_t rep_notify_process(struct bt_conn *conn,
 		LOG_WRN("Data size too big, truncating");
 		length = UINT8_MAX;
 	}
-	rep->size = (u8_t)length;
+	/* Zephyr uses the callback with data set to NULL to inform about the
+	 * subscription removal. Do not update the report size in that case.
+	 */
+	if (data != NULL) {
+		rep->size = (uint8_t)length;
+	}
+
 	return rep->notify_cb(rep->hids_c, rep, 0, data);
 }
 
@@ -1011,7 +1045,7 @@ int bt_gatt_hids_c_rep_subscribe(struct bt_gatt_hids_c *hids_c,
 	if (!hids_c || !rep || !func) {
 		return -EINVAL;
 	}
-	if (rep->ref.type != BT_GATT_HIDS_C_REPORT_TYPE_INPUT) {
+	if (rep->ref.type != BT_GATT_HIDS_REPORT_TYPE_INPUT) {
 		return -ENOTSUP;
 	}
 	if (rep->notify_cb) {
@@ -1024,7 +1058,8 @@ int bt_gatt_hids_c_rep_subscribe(struct bt_gatt_hids_c *hids_c,
 	rep->notify_params.value = BT_GATT_CCC_NOTIFY;
 	rep->notify_params.value_handle = rep->handlers.val;
 	rep->notify_params.ccc_handle = rep->handlers.ccc;
-	atomic_set(rep->notify_params.flags, BT_GATT_SUBSCRIBE_FLAG_VOLATILE);
+	atomic_set_bit(rep->notify_params.flags,
+		       BT_GATT_SUBSCRIBE_FLAG_VOLATILE);
 
 	LOG_DBG("Subscribe: val: %u, ccc: %u",
 		rep->notify_params.value_handle,
@@ -1063,9 +1098,9 @@ int bt_gatt_hids_c_rep_unsubscribe(struct bt_gatt_hids_c *hids_c,
  * @retval BT_GATT_ITER_STOP     Stop notification
  * @retval BT_GATT_ITER_CONTINUE Continue notification
  */
-static u8_t map_read_process(struct bt_conn *conn, u8_t err,
+static uint8_t map_read_process(struct bt_conn *conn, uint8_t err,
 			     struct bt_gatt_read_params *params,
-			     const void *data, u16_t length)
+			     const void *data, uint16_t length)
 {
 	struct bt_gatt_hids_c *hids_c;
 	size_t offset;
@@ -1087,7 +1122,7 @@ static u8_t map_read_process(struct bt_conn *conn, u8_t err,
 int bt_gatt_hids_c_map_read(struct bt_gatt_hids_c *hids_c,
 			    bt_gatt_hids_c_map_cb func,
 			    size_t offset,
-			    s32_t timeout)
+			    k_timeout_t timeout)
 {
 	int err;
 
@@ -1129,9 +1164,9 @@ int bt_gatt_hids_c_map_read(struct bt_gatt_hids_c *hids_c,
  * @retval BT_GATT_ITER_STOP     Stop notification
  * @retval BT_GATT_ITER_CONTINUE Continue notification
  */
-static u8_t pm_update_process(struct bt_conn *conn, u8_t err,
+static uint8_t pm_update_process(struct bt_conn *conn, uint8_t err,
 			     struct bt_gatt_read_params *params,
-			     const void *data, u16_t length)
+			     const void *data, uint16_t length)
 {
 	struct bt_gatt_hids_c *hids_c;
 
@@ -1144,7 +1179,7 @@ static u8_t pm_update_process(struct bt_conn *conn, u8_t err,
 	} else if (length != 1) {
 		LOG_ERR("Unexpected PM size");
 	} else {
-		hids_c->pm = (enum bt_gatt_hids_c_pm)((u8_t *)data)[0];
+		hids_c->pm = (enum bt_gatt_hids_pm)((uint8_t *)data)[0];
 	}
 
 	if (hids_c->pm_update_cb) {
@@ -1154,7 +1189,7 @@ static u8_t pm_update_process(struct bt_conn *conn, u8_t err,
 	return BT_GATT_ITER_STOP;
 }
 
-int bt_gatt_hids_c_pm_update(struct bt_gatt_hids_c *hids_c, s32_t timeout)
+int bt_gatt_hids_c_pm_update(struct bt_gatt_hids_c *hids_c, k_timeout_t timeout)
 {
 	int err;
 
@@ -1177,17 +1212,17 @@ int bt_gatt_hids_c_pm_update(struct bt_gatt_hids_c *hids_c, s32_t timeout)
 	return 0;
 }
 
-enum bt_gatt_hids_c_pm bt_gatt_hids_c_pm_get(
+enum bt_gatt_hids_pm bt_gatt_hids_c_pm_get(
 	const struct bt_gatt_hids_c *hids_c)
 {
 	return hids_c->pm;
 }
 
 int bt_gatt_hids_c_pm_write(struct bt_gatt_hids_c *hids_c,
-			    enum bt_gatt_hids_c_pm pm)
+			    enum bt_gatt_hids_pm pm)
 {
 	int err;
-	u8_t data[] = {(u8_t)pm};
+	uint8_t data[] = {(uint8_t)pm};
 
 	if (hids_c->handlers.pm == 0) {
 		return -EOPNOTSUPP;
@@ -1210,7 +1245,7 @@ int bt_gatt_hids_c_pm_write(struct bt_gatt_hids_c *hids_c,
 int bt_gatt_hids_c_suspend(struct bt_gatt_hids_c *hids_c)
 {
 	int err;
-	u8_t data[] = {BT_GATT_HIDS_C_CP_SUSPEND};
+	uint8_t data[] = {BT_GATT_HIDS_CONTROL_POINT_SUSPEND};
 
 	err = bt_gatt_write_without_response(hids_c->conn,
 					     hids_c->handlers.cp,
@@ -1223,7 +1258,7 @@ int bt_gatt_hids_c_suspend(struct bt_gatt_hids_c *hids_c)
 int bt_gatt_hids_c_exit_suspend(struct bt_gatt_hids_c *hids_c)
 {
 	int err;
-	u8_t data[] = {BT_GATT_HIDS_C_CP_EXIT_SUSPEND};
+	uint8_t data[] = {BT_GATT_HIDS_CONTROL_POINT_EXIT_SUSPEND};
 
 	err = bt_gatt_write_without_response(hids_c->conn,
 					     hids_c->handlers.cp,
@@ -1238,7 +1273,7 @@ struct bt_conn *bt_gatt_hids_c_conn(const struct bt_gatt_hids_c *hids_c)
 	return hids_c->conn;
 }
 
-const struct bt_gatt_hids_c_info_val *bt_gatt_hids_c_conn_info_val(
+const struct bt_gatt_hids_info *bt_gatt_hids_c_conn_info_val(
 	const struct bt_gatt_hids_c *hids_c)
 {
 	return &hids_c->info_val;
@@ -1285,7 +1320,7 @@ struct bt_gatt_hids_c_rep_info *bt_gatt_hids_c_rep_next(
 	/* Searching current report in array */
 	rep_arr = hids_c->rep_info;
 
-	for (n = 0; n + 1 <= hids_c->rep_cnt; ++n) {
+	for (n = 0; n + 1 < hids_c->rep_cnt; ++n) {
 		if (*rep_arr++ == rep) {
 			return *rep_arr;
 		}
@@ -1295,8 +1330,8 @@ struct bt_gatt_hids_c_rep_info *bt_gatt_hids_c_rep_next(
 
 struct bt_gatt_hids_c_rep_info *bt_gatt_hids_c_rep_find(
 	struct bt_gatt_hids_c *hids_c,
-	enum bt_gatt_hids_c_report_type type,
-	u8_t id)
+	enum bt_gatt_hids_report_type type,
+	uint8_t id)
 {
 	struct bt_gatt_hids_c_rep_info **rep_arr;
 	size_t n;
@@ -1324,12 +1359,12 @@ void *bt_gatt_hids_c_rep_user_data(const struct bt_gatt_hids_c_rep_info *rep)
 	return rep->user_data;
 }
 
-u8_t bt_gatt_hids_c_rep_id(const struct bt_gatt_hids_c_rep_info *rep)
+uint8_t bt_gatt_hids_c_rep_id(const struct bt_gatt_hids_c_rep_info *rep)
 {
 	return rep->ref.id;
 }
 
-enum bt_gatt_hids_c_report_type bt_gatt_hids_c_rep_type(
+enum bt_gatt_hids_report_type bt_gatt_hids_c_rep_type(
 	const struct bt_gatt_hids_c_rep_info *rep)
 {
 	return rep->ref.type;

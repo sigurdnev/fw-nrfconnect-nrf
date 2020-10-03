@@ -15,26 +15,27 @@ On Nordic Semiconductor's development kits, the UART 1 peripheral is typically g
 
 Any data sent from the Bluetooth LE unit is sent out of the UART 1 peripheral's TX pin.
 
+
+.. _central_uart_debug:
+
+Debugging
+*********
+
+In this sample, a UART console is used to send and read data over the NUS Client.
+Debug messages are not displayed in the UART console, but are printed by the RTT logger instead.
+
+If you want to view the debug messages, follow the procedure in :ref:`testing_rtt_connect`.
+
 Requirements
 ************
 
 * One of the following development boards:
 
-  * nRF52840 Development Kit board (PCA10056)
-  * nRF52 Development Kit board (PCA10040)
+  * |nRF5340DK|
+  * |nRF52840DK|
+  * |nRF52DK|
 
 * Another development board running a compatible application (see :ref:`peripheral_uart`).
-
-
-User interface
-**************
-
-Button 1:
-   * Confirm the passkey value that is printed on the COM listener to pair/bond with the other device.
-
-Button 2:
-   * Reject the passkey value that is printed on the COM listener to prevent pairing/bonding with the other device.
-
 
 Building and running
 ********************
@@ -52,13 +53,13 @@ After programming the sample to your board, test it by performing the following 
 
 1. Connect the board to the computer using a USB cable. The board is assigned a COM port (Windows) or ttyACM device (Linux), which is visible in the Device Manager.
 #. |connect_terminal_specific|
+#. Optionally, connect the RTT console to display debug messages. See :ref:`central_uart_debug`.
 #. Reset the board.
 #. Observe that the text "Starting NUS Client example" is printed on the COM listener running on the computer and the device starts scanning for Peripheral boards with NUS.
 #. Program the :ref:`peripheral_uart` sample to the second board.
    See the documentation for that sample for detailed instructions.
 #. Observe that the boards connect.
    When service discovery is completed, the event logs are printed on the Central board's terminal.
-#. On both devices, press Button 1 to confirm the passkey value used for bonding, or press Button 2 to reject it.
 #. Now you can send data between the two boards.
    To do so, type some characters in the terminal of one of the boards and hit Enter.
    Observe that the data is displayed on the UART on the other board.
@@ -73,13 +74,12 @@ This sample uses the following |NCS| libraries:
 * :ref:`nus_c_readme`
 * :ref:`gatt_dm_readme`
 * :ref:`nrf_bt_scan_readme`
-* :ref:`dk_buttons_and_leds_readme`
 
 In addition, it uses the following Zephyr libraries:
 
 * ``include/zephyr/types.h``
 * ``boards/arm/nrf*/board.h``
-* :ref:`zephyr:kernel`:
+* :ref:`zephyr:kernel_api`:
 
   * ``include/kernel.h``
 

@@ -7,8 +7,8 @@
 #include <zephyr.h>
 #include <string.h>
 #include <stdlib.h>
-#include <modem_info.h>
-#include <at_params.h>
+#include <modem/modem_info.h>
+#include <modem/at_params.h>
 #include <logging/log.h>
 
 LOG_MODULE_REGISTER(modem_info_params);
@@ -31,12 +31,16 @@ int modem_info_params_init(struct modem_param_info *modem)
 	modem->network.lte_mode.type		= MODEM_INFO_LTE_MODE;
 	modem->network.nbiot_mode.type		= MODEM_INFO_NBIOT_MODE;
 	modem->network.gps_mode.type		= MODEM_INFO_GPS_MODE;
+	modem->network.date_time.type		= MODEM_INFO_DATE_TIME;
+	modem->network.apn.type			= MODEM_INFO_APN;
 
 	modem->sim.uicc.type			= MODEM_INFO_UICC;
 	modem->sim.iccid.type			= MODEM_INFO_ICCID;
+	modem->sim.imsi.type		        = MODEM_INFO_IMSI;
 
 	modem->device.modem_fw.type		= MODEM_INFO_FW_VERSION;
 	modem->device.battery.type		= MODEM_INFO_BATTERY;
+	modem->device.imei.type			= MODEM_INFO_IMEI;
 	modem->device.board			= CONFIG_BOARD;
 	modem->device.app_version		= STRINGIFY(APP_VERSION);
 	modem->device.app_name			= STRINGIFY(PROJECT_NAME);
@@ -50,10 +54,10 @@ static int area_code_parse(struct lte_param *area_code)
 		return -EINVAL;
 	}
 
-	area_code->value_string[2] = '\0';
+	area_code->value_string[4] = '\0';
 	/* Parses the string, interpreting its content as an 	*/
 	/* integral number with base 16. (Hexadecimal)		*/
-	area_code->value = (double)strtol(area_code->value_string, NULL, 16);
+	area_code->value = strtol(area_code->value_string, NULL, 16);
 
 	return 0;
 }
@@ -106,15 +110,17 @@ static int modem_data_get(struct lte_param *param)
 	}
 
 	if (data_type == AT_PARAM_TYPE_STRING) {
-		ret = modem_info_string_get(param->type, param->value_string);
+		ret = modem_info_string_get(param->type,
+				param->value_string,
+				sizeof(param->value_string));
 		if (ret < 0) {
-			LOG_DBG("Link data not obtained: %d", ret);
+			LOG_ERR("Link data not obtained: %d %d", param->type, ret);
 			return ret;
 		}
 	} else if (data_type == AT_PARAM_TYPE_NUM_SHORT) {
 		ret = modem_info_short_get(param->type, &param->value);
 		if (ret < 0) {
-			LOG_DBG("Link data not obtained: %d", ret);
+			LOG_ERR("Link data not obtained: %d", ret);
 			return ret;
 		}
 	}
@@ -141,6 +147,11 @@ int modem_info_params_get(struct modem_param_info *modem)
 		ret += modem_data_get(&modem->network.lte_mode);
 		ret += modem_data_get(&modem->network.nbiot_mode);
 		ret += modem_data_get(&modem->network.gps_mode);
+		ret += modem_data_get(&modem->network.apn);
+
+		if (IS_ENABLED(CONFIG_MODEM_INFO_ADD_DATE_TIME)) {
+			ret += modem_data_get(&modem->network.date_time);
+		}
 
 		ret += mcc_mnc_parse(&modem->network.current_operator,
 				&modem->network.mcc,
@@ -149,7 +160,7 @@ int modem_info_params_get(struct modem_param_info *modem)
 				&modem->network.cellid_dec);
 		ret += area_code_parse(&modem->network.area_code);
 		if (ret) {
-			LOG_DBG("Network data not obtained: %d", ret);
+			LOG_ERR("Network data not obtained: %d", ret);
 			return -EAGAIN;
 		}
 	}
@@ -159,8 +170,11 @@ int modem_info_params_get(struct modem_param_info *modem)
 		if (IS_ENABLED(CONFIG_MODEM_INFO_ADD_SIM_ICCID)) {
 			ret += modem_data_get(&modem->sim.iccid);
 		}
+		if (IS_ENABLED(CONFIG_MODEM_INFO_ADD_SIM_IMSI)) {
+			ret += modem_data_get(&modem->sim.imsi);
+		}
 		if (ret) {
-			LOG_DBG("Sim data not obtained: %d", ret);
+			LOG_ERR("Sim data not obtained: %d", ret);
 			return -EAGAIN;
 		}
 	}
@@ -168,8 +182,9 @@ int modem_info_params_get(struct modem_param_info *modem)
 	if (IS_ENABLED(CONFIG_MODEM_INFO_ADD_DEVICE)) {
 		ret = modem_data_get(&modem->device.modem_fw);
 		ret += modem_data_get(&modem->device.battery);
+		ret += modem_data_get(&modem->device.imei);
 		if (ret) {
-			LOG_DBG("Device data not obtained: %d", ret);
+			LOG_ERR("Device data not obtained: %d", ret);
 			return -EAGAIN;
 		}
 	}

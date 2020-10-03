@@ -8,10 +8,10 @@
 #include <stddef.h>
 #include <string.h>
 #include <errno.h>
-#include <misc/printk.h>
-#include <misc/byteorder.h>
+#include <sys/printk.h>
+#include <sys/byteorder.h>
 #include <zephyr.h>
-#include <gpio.h>
+#include <drivers/gpio.h>
 #include <soc.h>
 #include <assert.h>
 #include <spinlock.h>
@@ -135,7 +135,7 @@ static struct conn_mode {
 	bool in_boot_mode;
 } conn_mode[CONFIG_BT_GATT_HIDS_MAX_CLIENT_COUNT];
 
-static const u8_t hello_world_str[] = {
+static const uint8_t hello_world_str[] = {
 	0x0b,	/* Key h */
 	0x08,	/* Key e */
 	0x0f,	/* Key l */
@@ -144,13 +144,13 @@ static const u8_t hello_world_str[] = {
 	0x28,	/* Key Return */
 };
 
-static const u8_t shift_key[] = { 225 };
+static const uint8_t shift_key[] = { 225 };
 
 /* Current report status
  */
 static struct keyboard_state {
-	u8_t ctrl_keys_state; /* Current keys state */
-	u8_t keys_state[KEY_PRESS_MAX];
+	uint8_t ctrl_keys_state; /* Current keys state */
+	uint8_t keys_state[KEY_PRESS_MAX];
 } hid_keyboard_state;
 
 #if CONFIG_NFC_OOB_PAIRING
@@ -175,7 +175,8 @@ static void advertising_start(void)
 						BT_LE_ADV_OPT_CONNECTABLE |
 						BT_LE_ADV_OPT_ONE_TIME,
 						BT_GAP_ADV_FAST_INT_MIN_2,
-						BT_GAP_ADV_FAST_INT_MAX_2);
+						BT_GAP_ADV_FAST_INT_MAX_2,
+						NULL);
 
 	err = bt_le_adv_start(adv_param, ad, ARRAY_SIZE(ad), sd,
 			      ARRAY_SIZE(sd));
@@ -241,7 +242,7 @@ static void pairing_process(struct k_work *work)
 }
 
 
-static void connected(struct bt_conn *conn, u8_t err)
+static void connected(struct bt_conn *conn, uint8_t err)
 {
 	char addr[BT_ADDR_LE_STR_LEN];
 
@@ -282,7 +283,7 @@ static void connected(struct bt_conn *conn, u8_t err)
 }
 
 
-static void disconnected(struct bt_conn *conn, u8_t reason)
+static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
 	int err;
 	bool is_any_dev_connected = false;
@@ -324,13 +325,19 @@ static void disconnected(struct bt_conn *conn, u8_t reason)
 }
 
 
-static void security_changed(struct bt_conn *conn, bt_security_t level)
+static void security_changed(struct bt_conn *conn, bt_security_t level,
+			     enum bt_security_err err)
 {
 	char addr[BT_ADDR_LE_STR_LEN];
 
 	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
 
-	printk("Security changed: %s level %u\n", addr, level);
+	if (!err) {
+		printk("Security changed: %s level %u\n", addr, level);
+	} else {
+		printk("Security failed: %s level %u err %d\n", addr, level,
+			err);
+	}
 }
 
 
@@ -343,7 +350,7 @@ static struct bt_conn_cb conn_callbacks = {
 
 static void caps_lock_handler(const struct bt_gatt_hids_rep *rep)
 {
-	u8_t report_val = ((*rep->data) & OUTPUT_REPORT_BIT_MASK_CAPS_LOCK) ?
+	uint8_t report_val = ((*rep->data) & OUTPUT_REPORT_BIT_MASK_CAPS_LOCK) ?
 			  1 : 0;
 	dk_set_led(LED_CAPS_LOCK, report_val);
 }
@@ -426,7 +433,7 @@ static void hid_init(void)
 	struct bt_gatt_hids_inp_rep       *hids_inp_rep;
 	struct bt_gatt_hids_outp_feat_rep *hids_outp_rep;
 
-	static const u8_t report_map[] = {
+	static const uint8_t report_map[] = {
 		0x05, 0x01,       /* Usage Page (Generic Desktop) */
 		0x09, 0x06,       /* Usage (Keyboard) */
 		0xA1, 0x01,       /* Collection (Application) */
@@ -505,32 +512,6 @@ static void hid_init(void)
 	__ASSERT(err == 0, "HIDS initialization failed\n");
 }
 
-
-static void bt_ready(int err)
-{
-	if (err) {
-		printk("Bluetooth init failed (err %d)\n", err);
-		return;
-	}
-
-	printk("Bluetooth initialized\n");
-
-	hid_init();
-
-	if (IS_ENABLED(CONFIG_SETTINGS)) {
-		settings_load();
-	}
-
-#if CONFIG_NFC_OOB_PAIRING
-	k_work_init(&adv_work, delayed_advertising_start);
-	app_nfc_init();
-#else
-	advertising_start();
-#endif
-
-	k_work_init(&pairing_work, pairing_process);
-}
-
 static void auth_passkey_display(struct bt_conn *conn, unsigned int passkey)
 {
 	char addr[BT_ADDR_LE_STR_LEN];
@@ -576,10 +557,15 @@ static void auth_cancel(struct bt_conn *conn)
 }
 
 
-static void auth_done(struct bt_conn *conn)
+static void pairing_confirm(struct bt_conn *conn)
 {
-	printk("%s()\n", __func__);
+	char addr[BT_ADDR_LE_STR_LEN];
+
+	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+
 	bt_conn_auth_pairing_confirm(conn);
+
+	printk("Pairing confirmed: %s\n", addr);
 }
 
 
@@ -615,13 +601,21 @@ static void auth_oob_data_request(struct bt_conn *conn,
 
 static void pairing_complete(struct bt_conn *conn, bool bonded)
 {
-	printk("Paired conn: %p, bonded: %d\n", conn, bonded);
+	char addr[BT_ADDR_LE_STR_LEN];
+
+	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+
+	printk("Pairing completed: %s, bonded: %d\n", addr, bonded);
 }
 
 
-static void pairing_failed(struct bt_conn *conn)
+static void pairing_failed(struct bt_conn *conn, enum bt_security_err reason)
 {
-	printk("Pairing failed conn: %p\n", conn);
+	char addr[BT_ADDR_LE_STR_LEN];
+
+	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+
+	printk("Pairing failed conn: %s, reason %d\n", addr, reason);
 }
 
 
@@ -629,7 +623,7 @@ static struct bt_conn_auth_cb conn_auth_callbacks = {
 	.passkey_display = auth_passkey_display,
 	.passkey_confirm = auth_passkey_confirm,
 	.cancel = auth_cancel,
-	.pairing_confirm = auth_done,
+	.pairing_confirm = pairing_confirm,
 #if CONFIG_NFC_OOB_PAIRING
 	.oob_data_request = auth_oob_data_request,
 #endif
@@ -651,9 +645,9 @@ static int key_report_con_send(const struct keyboard_state *state,
 			struct bt_conn *conn)
 {
 	int err = 0;
-	u8_t  data[INPUT_REPORT_KEYS_MAX_LEN];
-	u8_t *key_data;
-	const u8_t *key_state;
+	uint8_t  data[INPUT_REPORT_KEYS_MAX_LEN];
+	uint8_t *key_data;
+	const uint8_t *key_state;
 	size_t n;
 
 	data[0] = state->ctrl_keys_state;
@@ -710,18 +704,18 @@ static int key_report_send(void)
  *
  *  @return Mask of the control key or 0.
  */
-static u8_t button_ctrl_code(u8_t key)
+static uint8_t button_ctrl_code(uint8_t key)
 {
 	if (KEY_CTRL_CODE_MIN <= key && key <= KEY_CTRL_CODE_MAX) {
-		return (u8_t)(1U << (key - KEY_CTRL_CODE_MIN));
+		return (uint8_t)(1U << (key - KEY_CTRL_CODE_MIN));
 	}
 	return 0;
 }
 
 
-static int hid_kbd_state_key_set(u8_t key)
+static int hid_kbd_state_key_set(uint8_t key)
 {
-	u8_t ctrl_mask = button_ctrl_code(key);
+	uint8_t ctrl_mask = button_ctrl_code(key);
 
 	if (ctrl_mask) {
 		hid_keyboard_state.ctrl_keys_state |= ctrl_mask;
@@ -738,9 +732,9 @@ static int hid_kbd_state_key_set(u8_t key)
 }
 
 
-static int hid_kbd_state_key_clear(u8_t key)
+static int hid_kbd_state_key_clear(uint8_t key)
 {
-	u8_t ctrl_mask = button_ctrl_code(key);
+	uint8_t ctrl_mask = button_ctrl_code(key);
 
 	if (ctrl_mask) {
 		hid_keyboard_state.ctrl_keys_state &= ~ctrl_mask;
@@ -764,7 +758,7 @@ static int hid_kbd_state_key_clear(u8_t key)
  *
  *  @return 0 on success or negative error code.
  */
-static int hid_buttons_press(const u8_t *keys, size_t cnt)
+static int hid_buttons_press(const uint8_t *keys, size_t cnt)
 {
 	while (cnt--) {
 		int err;
@@ -787,7 +781,7 @@ static int hid_buttons_press(const u8_t *keys, size_t cnt)
  *
  *  @return 0 on success or negative error code.
  */
-static int hid_buttons_release(const u8_t *keys, size_t cnt)
+static int hid_buttons_release(const uint8_t *keys, size_t cnt)
 {
 	while (cnt--) {
 		int err;
@@ -805,7 +799,7 @@ static int hid_buttons_release(const u8_t *keys, size_t cnt)
 
 static void button_text_changed(bool down)
 {
-	static const u8_t *chr = hello_world_str;
+	static const uint8_t *chr = hello_world_str;
 
 	if (down) {
 		hid_buttons_press(chr, 1);
@@ -855,10 +849,10 @@ static void num_comp_reply(bool accept)
 }
 
 
-static void button_changed(u32_t button_state, u32_t has_changed)
+static void button_changed(uint32_t button_state, uint32_t has_changed)
 {
 
-	u32_t buttons = button_state & has_changed;
+	uint32_t buttons = button_state & has_changed;
 
 	if (k_msgq_num_used_get(&mitm_queue)) {
 		if (buttons & KEY_PAIRING_ACCEPT) {
@@ -916,7 +910,7 @@ static void configure_gpio(void)
 
 static void bas_notify(void)
 {
-	u8_t battery_level = bt_gatt_bas_get_battery_level();
+	uint8_t battery_level = bt_gatt_bas_get_battery_level();
 
 	battery_level--;
 
@@ -933,18 +927,35 @@ void main(void)
 	int err;
 	int blink_status = 0;
 
-	printk("Starting Nordic HID service keyboard example\n");
+	printk("Starting Bluetooth Peripheral HIDS keyboard example\n");
 
 	configure_gpio();
 
 	bt_conn_cb_register(&conn_callbacks);
 	bt_conn_auth_cb_register(&conn_auth_callbacks);
 
-	err = bt_enable(bt_ready);
+	err = bt_enable(NULL);
 	if (err) {
 		printk("Bluetooth init failed (err %d)\n", err);
 		return;
 	}
+
+	printk("Bluetooth initialized\n");
+
+	hid_init();
+
+	if (IS_ENABLED(CONFIG_SETTINGS)) {
+		settings_load();
+	}
+
+#if CONFIG_NFC_OOB_PAIRING
+	k_work_init(&adv_work, delayed_advertising_start);
+	app_nfc_init();
+#else
+	advertising_start();
+#endif
+
+	k_work_init(&pairing_work, pairing_process);
 
 	for (;;) {
 		if (is_adv) {
@@ -952,7 +963,7 @@ void main(void)
 		} else {
 			dk_set_led_off(ADV_STATUS_LED);
 		}
-		k_sleep(ADV_LED_BLINK_INTERVAL);
+		k_sleep(K_MSEC(ADV_LED_BLINK_INTERVAL));
 		/* Battery level simulation */
 		bas_notify();
 	}

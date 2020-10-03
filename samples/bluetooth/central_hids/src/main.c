@@ -10,7 +10,7 @@
 #include <stddef.h>
 #include <errno.h>
 #include <zephyr.h>
-#include <misc/printk.h>
+#include <sys/printk.h>
 
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/hci.h>
@@ -18,10 +18,12 @@
 #include <bluetooth/uuid.h>
 #include <bluetooth/gatt.h>
 #include <bluetooth/gatt_dm.h>
-#include <misc/byteorder.h>
+#include <sys/byteorder.h>
 #include <bluetooth/scan.h>
 #include <bluetooth/services/hids_c.h>
 #include <dk_buttons_and_leds.h>
+
+#include <settings/settings.h>
 
 /**
  * Switch between boot protocol and report protocol mode.
@@ -49,8 +51,7 @@
 
 static struct bt_conn *default_conn;
 static struct bt_gatt_hids_c hids_c;
-static struct bt_conn *auth_conn;
-static u8_t capslock_state;
+static uint8_t capslock_state;
 
 
 static void hids_on_ready(struct k_work *work);
@@ -61,7 +62,6 @@ static void scan_filter_match(struct bt_scan_device_info *device_info,
 			      struct bt_scan_filter_match *filter_match,
 			      bool connectable)
 {
-	int err;
 	char addr[BT_ADDR_LE_STR_LEN];
 
 	if (!filter_match->uuid.match ||
@@ -74,16 +74,11 @@ static void scan_filter_match(struct bt_scan_device_info *device_info,
 
 	const struct bt_uuid *uuid = filter_match->uuid.uuid[0];
 
-	bt_addr_le_to_str(device_info->addr, addr, sizeof(addr));
+	bt_addr_le_to_str(device_info->recv_info->addr, addr, sizeof(addr));
 
 	printk("Filters matched on UUID 0x%04x.\nAddress: %s connectable: %s\n",
 		BT_UUID_16(uuid)->val,
 		addr, connectable ? "yes" : "no");
-
-	err = bt_scan_stop();
-	if (err) {
-		printk("Stop LE scan failed (err %d)\n", err);
-	}
 }
 
 static void scan_connecting_error(struct bt_scan_device_info *device_info)
@@ -96,12 +91,33 @@ static void scan_connecting(struct bt_scan_device_info *device_info,
 {
 	default_conn = bt_conn_ref(conn);
 }
+/** .. include_startingpoint_scan_rst */
+static void scan_filter_no_match(struct bt_scan_device_info *device_info,
+				 bool connectable)
+{
+	int err;
+	struct bt_conn *conn;
+	char addr[BT_ADDR_LE_STR_LEN];
 
-static struct bt_scan_cb scan_cb = {
-	.filter_match = scan_filter_match,
-	.connecting_error = scan_connecting_error,
-	.connecting = scan_connecting
-};
+	if (device_info->recv_info->adv_type == BT_GAP_ADV_TYPE_ADV_DIRECT_IND) {
+		bt_addr_le_to_str(device_info->recv_info->addr, addr,
+				  sizeof(addr));
+		printk("Direct advertising received from %s\n", addr);
+		bt_scan_stop();
+
+		err = bt_conn_le_create(device_info->recv_info->addr,
+					BT_CONN_LE_CREATE_CONN,
+					device_info->conn_param, &conn);
+
+		if (!err) {
+			default_conn = bt_conn_ref(conn);
+			bt_conn_unref(conn);
+		}
+	}
+}
+/** .. include_endpoint_scan_rst */
+BT_SCAN_CB_INIT(scan_cb, scan_filter_match, scan_filter_no_match,
+		scan_connecting_error, scan_connecting);
 
 static void discovery_completed_cb(struct bt_gatt_dm *dm,
 				   void *context)
@@ -143,35 +159,61 @@ static const struct bt_gatt_dm_cb discovery_cb = {
 	.error_found = discovery_error_found_cb,
 };
 
-static void connected(struct bt_conn *conn, u8_t conn_err)
+static void gatt_discover(struct bt_conn *conn)
 {
+	int err;
+
+	if (conn != default_conn) {
+		return;
+	}
+
+	err = bt_gatt_dm_start(conn, BT_UUID_HIDS, &discovery_cb, NULL);
+	if (err) {
+		printk("could not start the discovery procedure, error "
+			"code: %d\n", err);
+	}
+}
+
+static void connected(struct bt_conn *conn, uint8_t conn_err)
+{
+	int err;
 	char addr[BT_ADDR_LE_STR_LEN];
 
 	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
 
 	if (conn_err) {
 		printk("Failed to connect to %s (%u)\n", addr, conn_err);
+		if (conn == default_conn) {
+			bt_conn_unref(default_conn);
+			default_conn = NULL;
+
+			/* This demo doesn't require active scan */
+			err = bt_scan_start(BT_SCAN_TYPE_SCAN_ACTIVE);
+			if (err) {
+				printk("Scanning failed to start (err %d)\n",
+				       err);
+			}
+		}
+
 		return;
 	}
 
 	printk("Connected: %s\n", addr);
 
-	if (bt_conn_security(conn, BT_SECURITY_MEDIUM)) {
-		printk("Failed to set security\n");
+	err = bt_conn_set_security(conn, BT_SECURITY_L2);
+	if (err) {
+		printk("Failed to set security: %d\n", err);
+
+		gatt_discover(conn);
 	}
 }
 
-static void disconnected(struct bt_conn *conn, u8_t reason)
+static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
 	char addr[BT_ADDR_LE_STR_LEN];
 	int err;
 
 	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
-
-	if (auth_conn) {
-		bt_conn_unref(auth_conn);
-		auth_conn = NULL;
-	}
 
 	printk("Disconnected: %s (reason %u)\n", addr, reason);
 
@@ -194,13 +236,21 @@ static void disconnected(struct bt_conn *conn, u8_t reason)
 	}
 }
 
-static void security_changed(struct bt_conn *conn, bt_security_t level)
+static void security_changed(struct bt_conn *conn, bt_security_t level,
+			     enum bt_security_err err)
 {
 	char addr[BT_ADDR_LE_STR_LEN];
 
 	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
 
-	printk("Security changed: %s level %u\n", addr, level);
+	if (!err) {
+		printk("Security changed: %s level %u\n", addr, level);
+	} else {
+		printk("Security failed: %s level %u err %d\n", addr, level,
+			err);
+	}
+
+	gatt_discover(conn);
 }
 
 static struct bt_conn_cb conn_callbacks = {
@@ -235,13 +285,13 @@ static void scan_init(void)
 	}
 }
 
-static u8_t hids_c_notify_cb(struct bt_gatt_hids_c *hids_c,
+static uint8_t hids_c_notify_cb(struct bt_gatt_hids_c *hids_c,
 			     struct bt_gatt_hids_c_rep_info *rep,
-			     u8_t err,
-			     const u8_t *data)
+			     uint8_t err,
+			     const uint8_t *data)
 {
-	u8_t size = bt_gatt_hids_c_rep_size(rep);
-	u8_t i;
+	uint8_t size = bt_gatt_hids_c_rep_size(rep);
+	uint8_t i;
 
 	if (!data) {
 		return BT_GATT_ITER_STOP;
@@ -256,13 +306,13 @@ static u8_t hids_c_notify_cb(struct bt_gatt_hids_c *hids_c,
 	return BT_GATT_ITER_CONTINUE;
 }
 
-static u8_t hids_c_boot_mouse_report(struct bt_gatt_hids_c *hids_c,
+static uint8_t hids_c_boot_mouse_report(struct bt_gatt_hids_c *hids_c,
 				     struct bt_gatt_hids_c_rep_info *rep,
-				     u8_t err,
-				     const u8_t *data)
+				     uint8_t err,
+				     const uint8_t *data)
 {
-	u8_t size = bt_gatt_hids_c_rep_size(rep);
-	u8_t i;
+	uint8_t size = bt_gatt_hids_c_rep_size(rep);
+	uint8_t i;
 
 	if (!data) {
 		return BT_GATT_ITER_STOP;
@@ -275,13 +325,13 @@ static u8_t hids_c_boot_mouse_report(struct bt_gatt_hids_c *hids_c,
 	return BT_GATT_ITER_CONTINUE;
 }
 
-static u8_t hids_c_boot_kbd_report(struct bt_gatt_hids_c *hids_c,
+static uint8_t hids_c_boot_kbd_report(struct bt_gatt_hids_c *hids_c,
 				   struct bt_gatt_hids_c_rep_info *rep,
-				   u8_t err,
-				   const u8_t *data)
+				   uint8_t err,
+				   const uint8_t *data)
 {
-	u8_t size = bt_gatt_hids_c_rep_size(rep);
-	u8_t i;
+	uint8_t size = bt_gatt_hids_c_rep_size(rep);
+	uint8_t i;
 
 	if (!data) {
 		return BT_GATT_ITER_STOP;
@@ -308,7 +358,7 @@ static void hids_on_ready(struct k_work *work)
 
 	while (NULL != (rep = bt_gatt_hids_c_rep_next(&hids_c, rep))) {
 		if (bt_gatt_hids_c_rep_type(rep) ==
-		    BT_GATT_HIDS_C_REPORT_TYPE_INPUT) {
+		    BT_GATT_HIDS_REPORT_TYPE_INPUT) {
 			printk("Subscribe to report id: %u\n",
 			       bt_gatt_hids_c_rep_id(rep));
 			err = bt_gatt_hids_c_rep_subscribe(&hids_c, rep,
@@ -346,7 +396,7 @@ static void hids_c_prep_fail_cb(struct bt_gatt_hids_c *hids_c, int err)
 static void hids_c_pm_update_cb(struct bt_gatt_hids_c *hids_c)
 {
 	printk("Protocol mode updated: %s\n",
-	      bt_gatt_hids_c_pm_get(hids_c) == BT_GATT_HIDS_C_PM_BOOT ?
+	      bt_gatt_hids_c_pm_get(hids_c) == BT_GATT_HIDS_PM_BOOT ?
 	      "BOOT" : "REPORT");
 }
 
@@ -365,25 +415,31 @@ static void button_bootmode(void)
 		return;
 	}
 	int err;
-	enum bt_gatt_hids_c_pm pm = bt_gatt_hids_c_pm_get(&hids_c);
+	enum bt_gatt_hids_pm pm = bt_gatt_hids_c_pm_get(&hids_c);
 
 	printk("Setting protocol mode: %s\n",
-	       (pm == BT_GATT_HIDS_C_PM_BOOT) ?
+	       (pm == BT_GATT_HIDS_PM_BOOT) ?
 	       "BOOT" : "REPORT");
 	err = bt_gatt_hids_c_pm_write(&hids_c,
-				      (pm == BT_GATT_HIDS_C_PM_BOOT) ?
-				      BT_GATT_HIDS_C_PM_REPORT :
-				      BT_GATT_HIDS_C_PM_BOOT);
+				      (pm == BT_GATT_HIDS_PM_BOOT) ?
+				      BT_GATT_HIDS_PM_REPORT :
+				      BT_GATT_HIDS_PM_BOOT);
 	if (err) {
 		printk("Cannot change protocol mode (err %d)\n", err);
 	}
 }
 
+static void hidc_write_cb(struct bt_gatt_hids_c *hidc,
+			  struct bt_gatt_hids_c_rep_info *rep,
+			  uint8_t err)
+{
+	printk("Caps lock sent\n");
+}
 
 static void button_capslock(void)
 {
 	int err;
-	u8_t data;
+	uint8_t data;
 
 	if (!bt_gatt_hids_c_ready_check(&hids_c)) {
 		printk("HID device not ready\n");
@@ -393,7 +449,7 @@ static void button_capslock(void)
 		printk("HID device does not have Keyboard OUT report\n");
 		return;
 	}
-	if (bt_gatt_hids_c_pm_get(&hids_c) != BT_GATT_HIDS_C_PM_BOOT) {
+	if (bt_gatt_hids_c_pm_get(&hids_c) != BT_GATT_HIDS_PM_BOOT) {
 		printk("This function works only in BOOT Report mode\n");
 		return;
 	}
@@ -401,7 +457,9 @@ static void button_capslock(void)
 	data = capslock_state ? 0x02 : 0;
 	err = bt_gatt_hids_c_rep_write_wo_rsp(&hids_c,
 					      hids_c.rep_boot.kbd_out,
-					      &data, sizeof(data));
+					      &data, sizeof(data),
+					      hidc_write_cb);
+
 	if (err) {
 		printk("Keyboard data write error (err: %d)\n", err);
 		return;
@@ -410,10 +468,10 @@ static void button_capslock(void)
 }
 
 
-static u8_t capslock_read_cb(struct bt_gatt_hids_c *hids_c,
+static uint8_t capslock_read_cb(struct bt_gatt_hids_c *hids_c,
 			     struct bt_gatt_hids_c_rep_info *rep,
-			     u8_t err,
-			     const u8_t *data)
+			     uint8_t err,
+			     const uint8_t *data)
 {
 	if (err) {
 		printk("Capslock read error (err: %u)\n", err);
@@ -432,7 +490,7 @@ static u8_t capslock_read_cb(struct bt_gatt_hids_c *hids_c,
 
 static void capslock_write_cb(struct bt_gatt_hids_c *hids_c,
 			      struct bt_gatt_hids_c_rep_info *rep,
-			      u8_t err)
+			      uint8_t err)
 {
 	int ret;
 
@@ -456,7 +514,7 @@ static void button_capslock_rsp(void)
 		return;
 	}
 	int err;
-	u8_t data;
+	uint8_t data;
 
 	capslock_state = capslock_state ? 0 : 1;
 	data = capslock_state ? 0x02 : 0;
@@ -472,36 +530,9 @@ static void button_capslock_rsp(void)
 }
 
 
-static void num_comp_reply(bool accept)
+static void button_handler(uint32_t button_state, uint32_t has_changed)
 {
-	if (accept) {
-		bt_conn_auth_passkey_confirm(auth_conn);
-		printk("Numeric Match, conn %p\n", auth_conn);
-	} else {
-		bt_conn_auth_cancel(auth_conn);
-		printk("Numeric Reject, conn %p\n", auth_conn);
-	}
-
-	bt_conn_unref(auth_conn);
-	auth_conn = NULL;
-}
-
-
-static void button_handler(u32_t button_state, u32_t has_changed)
-{
-	u32_t button = button_state & has_changed;
-
-	if (auth_conn) {
-		if (button & KEY_PAIRING_ACCEPT) {
-			num_comp_reply(true);
-		}
-
-		if (button & KEY_PAIRING_REJECT) {
-			num_comp_reply(false);
-		}
-
-		return;
-	}
+	uint32_t button = button_state & has_changed;
 
 	if (button & KEY_BOOTMODE_MASK) {
 		button_bootmode();
@@ -515,42 +546,6 @@ static void button_handler(u32_t button_state, u32_t has_changed)
 }
 
 
-static void gatt_discover(struct bt_conn *conn)
-{
-	if (conn == default_conn) {
-		int err = bt_gatt_dm_start(conn,
-					   BT_UUID_HIDS,
-					   &discovery_cb,
-					   NULL);
-		if (err) {
-			printk("could not start the discovery procedure, error "
-			       "code: %d\n", err);
-		}
-	}
-}
-
-static void auth_passkey_display(struct bt_conn *conn, unsigned int passkey)
-{
-	char addr[BT_ADDR_LE_STR_LEN];
-
-	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
-
-	printk("Passkey for %s: %06u\n", addr, passkey);
-}
-
-static void auth_passkey_confirm(struct bt_conn *conn, unsigned int passkey)
-{
-	char addr[BT_ADDR_LE_STR_LEN];
-
-	auth_conn = bt_conn_ref(conn);
-
-	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
-
-	printk("Passkey for %s: %06u\n", addr, passkey);
-	printk("Press Button 1 to confirm, Button 2 to reject.\n");
-}
-
-
 static void auth_cancel(struct bt_conn *conn)
 {
 	char addr[BT_ADDR_LE_STR_LEN];
@@ -558,41 +553,43 @@ static void auth_cancel(struct bt_conn *conn)
 	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
 
 	printk("Pairing cancelled: %s\n", addr);
-
-	gatt_discover(conn);
 }
 
 
-static void auth_done(struct bt_conn *conn)
+static void pairing_confirm(struct bt_conn *conn)
 {
-	printk("%s()\n", __func__);
+	char addr[BT_ADDR_LE_STR_LEN];
+
+	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+
 	bt_conn_auth_pairing_confirm(conn);
 
-	gatt_discover(conn);
+	printk("Pairing confirmed: %s\n", addr);
 }
 
 
 static void pairing_complete(struct bt_conn *conn, bool bonded)
 {
-	printk("Paired conn: %p, bonded: %d\n", conn, bonded);
+	char addr[BT_ADDR_LE_STR_LEN];
 
-	gatt_discover(conn);
+	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+
+	printk("Pairing completed: %s, bonded: %d\n", addr, bonded);
 }
 
 
-static void pairing_failed(struct bt_conn *conn)
+static void pairing_failed(struct bt_conn *conn, enum bt_security_err reason)
 {
-	printk("Pairing failed conn: %p\n", conn);
+	char addr[BT_ADDR_LE_STR_LEN];
 
-	gatt_discover(conn);
+	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+
+	printk("Pairing failed conn: %s, reason %d\n", addr, reason);
 }
-
 
 static struct bt_conn_auth_cb conn_auth_callbacks = {
-	.passkey_display = auth_passkey_display,
-	.passkey_confirm = auth_passkey_confirm,
 	.cancel = auth_cancel,
-	.pairing_confirm = auth_done,
+	.pairing_confirm = pairing_confirm,
 	.pairing_complete = pairing_complete,
 	.pairing_failed = pairing_failed
 };
@@ -602,7 +599,7 @@ void main(void)
 {
 	int err;
 
-	printk("Starting HIDS Client example\n");
+	printk("Starting Bluetooth Central HIDS example\n");
 
 	bt_gatt_hids_c_init(&hids_c, &hids_c_init_params);
 
@@ -621,6 +618,10 @@ void main(void)
 	}
 
 	printk("Bluetooth initialized\n");
+
+	if (IS_ENABLED(CONFIG_SETTINGS)) {
+		settings_load();
+	}
 
 	scan_init();
 

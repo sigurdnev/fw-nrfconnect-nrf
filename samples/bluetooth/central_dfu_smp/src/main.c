@@ -10,16 +10,18 @@
 #include <stddef.h>
 #include <errno.h>
 #include <zephyr.h>
-#include <misc/printk.h>
+#include <sys/printk.h>
 
-#include <cbor.h>
+#include <tinycbor/cbor.h>
+#include <tinycbor/cbor_buf_reader.h>
+#include <tinycbor/cbor_buf_writer.h>
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/hci.h>
 #include <bluetooth/conn.h>
 #include <bluetooth/uuid.h>
 #include <bluetooth/gatt.h>
 #include <bluetooth/gatt_dm.h>
-#include <misc/byteorder.h>
+#include <sys/byteorder.h>
 #include <bluetooth/scan.h>
 #include <bluetooth/services/dfu_smp_c.h>
 #include <dk_buttons_and_leds.h>
@@ -37,7 +39,7 @@ static struct bt_gatt_exchange_params exchange_params;
 /* Buffer for response */
 struct smp_buffer {
 	struct dfu_smp_header header;
-	u8_t payload[CBOR_BUFFER_SIZE];
+	uint8_t payload[CBOR_BUFFER_SIZE];
 };
 static struct smp_buffer smp_rsp_buff;
 
@@ -46,18 +48,12 @@ static void scan_filter_match(struct bt_scan_device_info *device_info,
 			      struct bt_scan_filter_match *filter_match,
 			      bool connectable)
 {
-	int err;
 	char addr[BT_ADDR_LE_STR_LEN];
 
-	bt_addr_le_to_str(device_info->addr, addr, sizeof(addr));
+	bt_addr_le_to_str(device_info->recv_info->addr, addr, sizeof(addr));
 
 	printk("Filters matched. Address: %s connectable: %s\n",
 		addr, connectable ? "yes" : "no");
-
-	err = bt_scan_stop();
-	if (err) {
-		printk("Stop LE scan failed (err %d)\n", err);
-	}
 }
 
 static void scan_connecting_error(struct bt_scan_device_info *device_info)
@@ -71,11 +67,8 @@ static void scan_connecting(struct bt_scan_device_info *device_info,
 	default_conn = bt_conn_ref(conn);
 }
 
-static struct bt_scan_cb scan_cb = {
-	.filter_match = scan_filter_match,
-	.connecting_error = scan_connecting_error,
-	.connecting = scan_connecting
-};
+BT_SCAN_CB_INIT(scan_cb, scan_filter_match, NULL,
+		scan_connecting_error, scan_connecting);
 
 static void discovery_completed_cb(struct bt_gatt_dm *dm,
 				   void *context)
@@ -118,14 +111,14 @@ static const struct bt_gatt_dm_cb discovery_cb = {
 	.error_found = discovery_error_found_cb,
 };
 
-static void exchange_func(struct bt_conn *conn, u8_t err,
+static void exchange_func(struct bt_conn *conn, uint8_t err,
 			  struct bt_gatt_exchange_params *params)
 {
 	printk("MTU exchange %s\n", err == 0 ? "successful" : "failed");
 	printk("Current MTU: %u\n", bt_gatt_get_mtu(conn));
 }
 
-static void connected(struct bt_conn *conn, u8_t conn_err)
+static void connected(struct bt_conn *conn, uint8_t conn_err)
 {
 	char addr[BT_ADDR_LE_STR_LEN];
 	int err;
@@ -134,12 +127,24 @@ static void connected(struct bt_conn *conn, u8_t conn_err)
 
 	if (conn_err) {
 		printk("Failed to connect to %s (%u)\n", addr, conn_err);
+		if (conn == default_conn) {
+			bt_conn_unref(default_conn);
+			default_conn = NULL;
+
+			/* This demo doesn't require active scan */
+			err = bt_scan_start(BT_SCAN_TYPE_SCAN_ACTIVE);
+			if (err) {
+				printk("Scanning failed to start (err %d)\n",
+				       err);
+			}
+		}
+
 		return;
 	}
 
 	printk("Connected: %s\n", addr);
 
-	if (bt_conn_security(conn, BT_SECURITY_MEDIUM)) {
+	if (bt_conn_set_security(conn, BT_SECURITY_L2)) {
 		printk("Failed to set security\n");
 	}
 
@@ -163,7 +168,7 @@ static void connected(struct bt_conn *conn, u8_t conn_err)
 	}
 }
 
-static void disconnected(struct bt_conn *conn, u8_t reason)
+static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
 	char addr[BT_ADDR_LE_STR_LEN];
 	int err;
@@ -186,9 +191,25 @@ static void disconnected(struct bt_conn *conn, u8_t reason)
 	}
 }
 
+static void security_changed(struct bt_conn *conn, bt_security_t level,
+			     enum bt_security_err err)
+{
+	char addr[BT_ADDR_LE_STR_LEN];
+
+	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+
+	if (!err) {
+		printk("Security changed: %s level %u\n", addr, level);
+	} else {
+		printk("Security failed: %s level %u err %d\n", addr, level,
+			err);
+	}
+}
+
 static struct bt_conn_cb conn_callbacks = {
 	.connected = connected,
 	.disconnected = disconnected,
+	.security_changed = security_changed
 };
 
 static void scan_init(void)
@@ -229,22 +250,9 @@ static const struct bt_gatt_dfu_smp_c_init_params init_params = {
 	.error_cb = dfu_smp_c_on_error
 };
 
-static CborError cbor_stream(void *token, const char *fmt, ...)
-{
-	va_list ap;
-
-	(void)token;
-	va_start(ap, fmt);
-	vprintk(fmt, ap);
-	va_end(ap);
-
-	return CborNoError;
-}
-
-
 static void smp_echo_rsp_proc(struct bt_gatt_dfu_smp_c *dfu_smp_c)
 {
-	u8_t *p_outdata = (u8_t *)(&smp_rsp_buff);
+	uint8_t *p_outdata = (uint8_t *)(&smp_rsp_buff);
 	const struct bt_gatt_dfu_smp_rsp_state *rsp_state;
 
 	rsp_state = bt_gatt_dfu_smp_c_rsp_state(dfu_smp_c);
@@ -267,7 +275,7 @@ static void smp_echo_rsp_proc(struct bt_gatt_dfu_smp_c *dfu_smp_c)
 			       smp_rsp_buff.header.op);
 			return;
 		}
-		u16_t group = ((u16_t)smp_rsp_buff.header.group_h8) << 8 |
+		uint16_t group = ((uint16_t)smp_rsp_buff.header.group_h8) << 8 |
 				      smp_rsp_buff.header.group_l8;
 		if (group != 0 /* OS */) {
 			printk("Unexpected command group (%u)!\n", group);
@@ -278,27 +286,26 @@ static void smp_echo_rsp_proc(struct bt_gatt_dfu_smp_c *dfu_smp_c)
 			       smp_rsp_buff.header.id);
 			return;
 		}
-		size_t payload_len = ((u16_t)smp_rsp_buff.header.len_h8) << 8 |
+		size_t payload_len = ((uint16_t)smp_rsp_buff.header.len_h8) << 8 |
 				      smp_rsp_buff.header.len_l8;
 
 		CborError cbor_error;
 		CborParser parser;
 		CborValue value;
+		struct cbor_buf_reader reader;
 
-		cbor_error = cbor_parser_init(smp_rsp_buff.payload,
-					      payload_len,
-					      0,
-					      &parser,
-					      &value);
+		cbor_buf_reader_init(&reader, smp_rsp_buff.payload, payload_len);
+
+		cbor_error = cbor_parser_init(&reader.r, 0, &parser, &value);
+
 		if (cbor_error != CborNoError) {
 			printk("CBOR parser initialization failed (err: %d)\n",
 			       cbor_error);
 			return;
 		}
-		cbor_error =
-			cbor_value_to_pretty_stream(cbor_stream, NULL,
-						    &value,
-						    CborPrettyDefaultFlags);
+
+		cbor_error = cbor_value_to_pretty_advance(stdout, &value);
+
 		printk("\n");
 		if (cbor_error != CborNoError) {
 			printk("Cannot print received CBOR stream (err: %d)\n",
@@ -315,19 +322,21 @@ static int send_smp_echo(struct bt_gatt_dfu_smp_c *dfu_smp_c,
 	static struct smp_buffer smp_cmd;
 	CborEncoder cbor, cbor_map;
 	size_t payload_len;
+	struct cbor_buf_writer writer;
 
-	cbor_encoder_init(&cbor, smp_cmd.payload, sizeof(smp_cmd.payload), 0);
+	cbor_buf_writer_init(&writer, smp_cmd.payload, sizeof(smp_cmd.payload));
+	cbor_encoder_init(&cbor, &writer.enc, 0);
 	cbor_encoder_create_map(&cbor, &cbor_map, 1);
 	cbor_encode_text_stringz(&cbor_map, "d");
 	cbor_encode_text_stringz(&cbor_map, string);
 	cbor_encoder_close_container(&cbor, &cbor_map);
 
-	payload_len = cbor_encoder_get_buffer_size(&cbor, smp_cmd.payload);
+	payload_len = (size_t)(writer.ptr - smp_cmd.payload);
 
 	smp_cmd.header.op = 2; /* Write */
 	smp_cmd.header.flags = 0;
-	smp_cmd.header.len_h8 = (u8_t)((payload_len >> 8) & 0xFF);
-	smp_cmd.header.len_l8 = (u8_t)((payload_len >> 0) & 0xFF);
+	smp_cmd.header.len_h8 = (uint8_t)((payload_len >> 8) & 0xFF);
+	smp_cmd.header.len_l8 = (uint8_t)((payload_len >> 0) & 0xFF);
 	smp_cmd.header.group_h8 = 0;
 	smp_cmd.header.group_l8 = 0; /* OS */
 	smp_cmd.header.seq = 0;
@@ -358,7 +367,7 @@ static void button_echo(bool state)
 }
 
 
-static void button_handler(u32_t button_state, u32_t has_changed)
+static void button_handler(uint32_t button_state, uint32_t has_changed)
 {
 	if (has_changed & KEY_ECHO_MASK) {
 		button_echo(button_state & KEY_ECHO_MASK);
@@ -370,7 +379,7 @@ void main(void)
 {
 	int err;
 
-	printk("Starting DFU SMP Client example\n");
+	printk("Starting Bluetooth Central DFU SMP example\n");
 
 	bt_gatt_dfu_smp_c_init(&dfu_smp_c, &init_params);
 

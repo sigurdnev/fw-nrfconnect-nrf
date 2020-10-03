@@ -6,14 +6,17 @@
 
 menuconfig FOTA_DOWNLOAD
 	bool "FOTA Download"
-	select DOWNLOAD_CLIENT
-	select IMG_MANAGER
-	select FLASH
-	select FLASH_PAGE_LAYOUT
-	select MPU_ALLOW_FLASH_WRITE
-	select IMG_ERASE_PROGRESSIVELY
+	depends on DOWNLOAD_CLIENT
+	depends on DFU_TARGET
 
 if (FOTA_DOWNLOAD)
+
+config FOTA_SOCKET_RETRIES
+	int "Number of retries for socket-related download issues"
+	default 2
+
+config FOTA_DOWNLOAD_PROGRESS_EVT
+	bool "Emit progress event upon receiving a download fragment"
 
 module=FOTA_DOWNLOAD
 module-dep=LOG

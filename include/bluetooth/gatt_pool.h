@@ -9,9 +9,9 @@
 
 /**
  * @file
- * @defgroup bt_gatt_pool  BLE GATT attribute pools API
+ * @defgroup bt_gatt_pool  Bluetooth LE GATT attribute pools API
  * @{
- * @brief BLE GATT attribute pools.
+ * @brief Bluetooth LE GATT attribute pools.
  */
 
 #ifdef __cplusplus
@@ -38,7 +38,7 @@ extern "C" {
 		.attr_array_size = _attr_array_size                            \
 	}
 
-/** @brief Define a new BLE GATT attribute pool.
+/** @brief Define a new GATT attribute pool.
  *
  *  This macro creates a new attribute pool.
  *
@@ -66,17 +66,19 @@ extern "C" {
 /** @brief Register a characteristic descriptor.
  *
  *  @param _gp GATT service object with dynamic attribute allocation.
- *  @param _chrc_uuid_init Characteristic UUID.
- *  @param _char_props Properties of the characteristic.
+ *  @param _uuid Characteristic UUID.
+ *  @param _props Characteristic properties.
+ *  @param _perm Characteristic access permissions.
+ *  @param _read Characteristic read callback.
+ *  @param _write Characteristic write callback.
+ *  @param _value Characteristic value.
  */
-#define BT_GATT_POOL_CHRC(_gp, _chrc_uuid_init, _char_props)                   \
+#define BT_GATT_POOL_CHRC(_gp, _uuid, _props, _perm, _read, _write, _value)    \
 	do {                                                                   \
 		int _ret;                                                      \
-		const struct bt_gatt_chrc _chrc = {                            \
-		    .uuid = _chrc_uuid_init,                                   \
-		    .properties = _char_props,                                 \
-		};                                                             \
-		_ret = bt_gatt_pool_chrc_alloc(_gp, &_chrc);                   \
+		const struct bt_gatt_attr _attr = BT_GATT_ATTRIBUTE(           \
+			_uuid, _perm, _read, _write, _value);                  \
+		_ret = bt_gatt_pool_chrc_alloc(_gp, _props, &_attr);           \
 		__ASSERT_NO_MSG(!_ret);                                        \
 		(void)_ret;                                                    \
 	} while (0)
@@ -84,12 +86,17 @@ extern "C" {
 /** @brief Register an attribute descriptor.
  *
  *  @param _gp GATT service object with dynamic attribute allocation.
- *  @param _descriptor_init Attribute descriptor.
+ *  @param _uuid Descriptor UUID.
+ *  @param _perm Descriptor access permissions.
+ *  @param _read Descriptor read callback.
+ *  @param _write Descriptor write callback.
+ *  @param _value Descriptor value.
  */
-#define BT_GATT_POOL_DESC(_gp, _descriptor_init)                               \
+#define BT_GATT_POOL_DESC(_gp, _uuid, _perm, _read, _write, _value)            \
 	do {                                                                   \
 		int _ret;                                                      \
-		const struct bt_gatt_attr _descriptor = _descriptor_init;      \
+		const struct bt_gatt_attr _descriptor = BT_GATT_DESCRIPTOR(    \
+			_uuid, _perm, _read, _write, _value);                  \
 		_ret = bt_gatt_pool_desc_alloc(_gp, &_descriptor);             \
 		__ASSERT_NO_MSG(!_ret);                                        \
 		(void)_ret;                                                    \
@@ -98,18 +105,16 @@ extern "C" {
 /** @brief Register a CCC descriptor.
  *
  *  @param _gp GATT service object with dynamic attribute allocation.
- *  @param _ccc_cfg CCC descriptor configuration.
- *  @param _ccc_cb CCC descriptor callback.
+ *  @param _ccc CCC descriptor configuration.
+ *  @param _ccc_changed CCC value changed callback.
+ *  @param _perm CCC descriptor permissions.
  */
-#define BT_GATT_POOL_CCC(_gp, _ccc_cfg, _ccc_cb)                               \
+#define BT_GATT_POOL_CCC(_gp, _ccc, _ccc_changed, _perm)                       \
 	do {                                                                   \
 		int _ret;                                                      \
-		const struct _bt_gatt_ccc _ccc = {                             \
-		    .cfg = _ccc_cfg,                                           \
-		    .cfg_len = ARRAY_SIZE(_ccc_cfg),                           \
-		    .cfg_changed = _ccc_cb,                                    \
-		};                                                             \
-		_ret = bt_gatt_pool_ccc_alloc(_gp, &_ccc);                     \
+		_ccc = (struct _bt_gatt_ccc)BT_GATT_CCC_INITIALIZER(\
+			_ccc_changed, NULL, NULL);      \
+		_ret = bt_gatt_pool_ccc_alloc(_gp, &_ccc, _perm);              \
 		__ASSERT_NO_MSG(!_ret);                                        \
 		(void)_ret;                                                    \
 	} while (0)
@@ -142,13 +147,14 @@ int bt_gatt_pool_svc_alloc(struct bt_gatt_pool *gp,
 
 /** @brief Take a characteristic descriptor from the pool.
  *
- *  @param gp   GATT service object with dynamic attribute allocation.
- *  @param chrc Characteristic descriptor.
+ *  @param gp    GATT service object with dynamic attribute allocation.
+ *  @param props Properties of the characteristic.
+ *  @param attr  Characteristic value attribute.
  *
  *  @return 0 or a negative error code.
  */
-int bt_gatt_pool_chrc_alloc(struct bt_gatt_pool *gp,
-			    struct bt_gatt_chrc const *chrc);
+int bt_gatt_pool_chrc_alloc(struct bt_gatt_pool *gp, uint8_t props,
+			    struct bt_gatt_attr const *attr);
 
 /** @brief Take an attribute descriptor from the pool.
  *
@@ -164,11 +170,14 @@ int bt_gatt_pool_desc_alloc(struct bt_gatt_pool *gp,
  *
  *  @param gp GATT service object with dynamic attribute allocation.
  *  @param ccc CCC descriptor.
+ *  @param perm Permissions to access CCC.
+ *              Use the GATT attribute permission bit field values.
  *
  *  @return 0 or negative error code.
  */
 int bt_gatt_pool_ccc_alloc(struct bt_gatt_pool *gp,
-			   struct _bt_gatt_ccc const *ccc);
+			   struct _bt_gatt_ccc *ccc,
+			   uint8_t perm);
 
 /** @brief Free the whole dynamically created GATT service.
  *
