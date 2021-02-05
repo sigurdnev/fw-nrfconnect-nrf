@@ -20,7 +20,7 @@
 #include <modem/at_cmd_parser.h>
 #include <modem/lte_lc.h>
 #endif
-#include <modem/bsdlib.h>
+#include <modem/nrf_modem_lib.h>
 
 LOG_MODULE_REGISTER(nrf9160_gps, CONFIG_NRF9160_GPS_LOG_LEVEL);
 
@@ -45,12 +45,13 @@ LOG_MODULE_REGISTER(nrf9160_gps, CONFIG_NRF9160_GPS_LOG_LEVEL);
 #define GPS_BLOCKED_TIMEOUT CONFIG_NRF9160_GPS_PRIORITY_WINDOW_TIMEOUT_SEC
 
 struct gps_drv_data {
-	struct device *dev;
+	const struct device *dev;
 	gps_event_handler_t handler;
 	struct gps_config current_cfg;
 	atomic_t is_init;
 	atomic_t is_active;
 	atomic_t is_shutdown;
+	atomic_t timeout_occurred;
 	int socket;
 	K_THREAD_STACK_MEMBER(thread_stack,
 			      CONFIG_NRF9160_GPS_THREAD_STACK_SIZE);
@@ -68,10 +69,11 @@ struct nrf9160_gps_config {
 	nrf_gnss_nmea_mask_t nmea_mask;
 	nrf_gnss_delete_mask_t delete_mask;
 	nrf_gnss_power_save_mode_t power_mode;
+	nrf_gnss_use_case_t use_case;
 	bool priority;
 };
 
-static int stop_gps(struct device *dev, bool is_timeout);
+static int stop_gps(const struct device *dev, bool is_timeout);
 
 static uint64_t fix_timestamp;
 
@@ -116,6 +118,12 @@ static void copy_pvt(struct gps_pvt *dest, nrf_gnss_pvt_data_frame_t *src)
 		dest->sv[i].elevation = src->sv[i].elevation;
 		dest->sv[i].azimuth = src->sv[i].azimuth;
 		dest->sv[i].signal = src->sv[i].signal;
+		dest->sv[i].in_fix =
+			(src->sv[i].flags & NRF_GNSS_SV_FLAG_USED_IN_FIX) ==
+			NRF_GNSS_SV_FLAG_USED_IN_FIX;
+		dest->sv[i].unhealthy =
+			(src->sv[i].flags & NRF_GNSS_SV_FLAG_UNHEALTHY) ==
+			NRF_GNSS_SV_FLAG_UNHEALTHY;
 	}
 }
 
@@ -174,7 +182,7 @@ static void print_satellite_stats(nrf_gnss_data_frame_t *pvt_data)
 			(k_uptime_get() - fix_timestamp) / 1000);
 }
 
-static void notify_event(struct device *dev, struct gps_event *evt)
+static void notify_event(const struct device *dev, struct gps_event *evt)
 {
 	struct gps_drv_data *drv_data = dev->data;
 
@@ -261,6 +269,7 @@ static void gps_thread(int dev_ptr)
 wait:
 	k_sem_take(&drv_data->thread_run_sem, K_FOREVER);
 
+	evt.type = GPS_EVT_SEARCH_STARTED;
 	notify_event(dev, &evt);
 
 	while (true) {
@@ -275,12 +284,12 @@ wait:
 		if (!has_fix) {
 			/** If nrf_recv() blocks for more than one second, a fix
 			 *  has been obtained or the GPS has timed out. Submit
-			 *  a delayed timeout work every two seconds to make
+			 *  a delayed timeout work every five seconds to make
 			 *  sure the appropriate event is propagated upon
 			 *  a block.
 			 */
 			k_delayed_work_submit(&drv_data->timeout_work,
-					      K_SECONDS(2));
+					      K_SECONDS(5));
 		}
 
 		len = nrf_recv(drv_data->socket, &raw_gps_data,
@@ -301,7 +310,7 @@ wait:
 				atomic_set(&drv_data->is_shutdown, 1);
 				nrf_close(drv_data->socket);
 
-				bsdlib_shutdown_wait();
+				nrf_modem_lib_shutdown_wait();
 				if (open_socket(drv_data) != 0) {
 					LOG_ERR("Failed to open socket after "
 						"shutdown sleep, killing thread");
@@ -321,6 +330,14 @@ wait:
 
 		switch (raw_gps_data.data_id) {
 		case NRF_GNSS_PVT_DATA_ID:
+			if (atomic_get(&drv_data->timeout_occurred) ||
+			    ((drv_data->current_cfg.nav_mode != GPS_NAV_MODE_CONTINUOUS) &&
+			    has_fix)) {
+				atomic_set(&drv_data->timeout_occurred, 0);
+				evt.type = GPS_EVT_SEARCH_STARTED;
+				notify_event(dev, &evt);
+			}
+
 			has_fix = false;
 
 			if (has_no_time_window(&raw_gps_data.pvt) ||
@@ -437,14 +454,14 @@ wait:
 	}
 }
 
-static int init_thread(struct device *dev)
+static int init_thread(const struct device *dev)
 {
 	struct gps_drv_data *drv_data = dev->data;
 
 	drv_data->thread_id = k_thread_create(
 			&drv_data->thread, drv_data->thread_stack,
 			K_THREAD_STACK_SIZEOF(drv_data->thread_stack),
-			(k_thread_entry_t)gps_thread, dev, NULL, NULL,
+			(k_thread_entry_t)gps_thread, (void *)dev, NULL, NULL,
 			K_PRIO_PREEMPT(CONFIG_NRF9160_GPS_THREAD_PRIORITY),
 			0, K_NO_WAIT);
 
@@ -452,7 +469,7 @@ static int init_thread(struct device *dev)
 }
 
 #ifdef CONFIG_NRF9160_GPS_HANDLE_MODEM_CONFIGURATION
-static int enable_gps(struct device *dev)
+static int enable_gps(const struct device *dev)
 {
 	int err;
 	enum lte_lc_system_mode system_mode;
@@ -551,7 +568,7 @@ static int parse_cfg(struct gps_config *cfg_src,
 	}
 
 	if (cfg_src->delete_agps_data) {
-		cfg_dst->delete_mask = 0xFF;
+		cfg_dst->delete_mask = 0x7F;
 	}
 
 	set_nmea_mask(&cfg_dst->nmea_mask);
@@ -564,10 +581,22 @@ static int parse_cfg(struct gps_config *cfg_src,
 
 	cfg_dst->priority = cfg_src->priority;
 
+	if (cfg_src->use_case == GPS_USE_CASE_SINGLE_COLD_START) {
+		cfg_dst->use_case = NRF_GNSS_USE_CASE_SINGLE_COLD_START;
+	} else if (cfg_src->use_case == GPS_USE_CASE_MULTIPLE_HOT_START) {
+		cfg_dst->use_case = NRF_GNSS_USE_CASE_MULTIPLE_HOT_START;
+	}
+
+	if (cfg_src->accuracy == GPS_ACCURACY_NORMAL) {
+		cfg_dst->use_case |= NRF_GNSS_USE_CASE_NORMAL_ACCURACY;
+	} else if (cfg_src->accuracy == GPS_ACCURACY_LOW) {
+		cfg_dst->use_case |= NRF_GNSS_USE_CASE_LOW_ACCURACY;
+	}
+
 	return 0;
 }
 
-static int start(struct device *dev, struct gps_config *cfg)
+static int start(const struct device *dev, struct gps_config *cfg)
 {
 	int retval, err;
 	struct gps_drv_data *drv_data = dev->data;
@@ -661,9 +690,21 @@ set_configuration:
 		}
 	}
 
+	if (gps_cfg.use_case) {
+		retval = nrf_setsockopt(drv_data->socket,
+					NRF_SOL_GNSS,
+					NRF_SO_GNSS_USE_CASE,
+					&gps_cfg.use_case,
+					sizeof(gps_cfg.use_case));
+		if (retval) {
+			LOG_ERR("Failed to set use case and accuracy");
+			return -EIO;
+		}
+	}
+
 	/* The GPS is started before setting NRF_SO_GNSS_ENABLE_PRIORITY or
 	 * NRF_SO_GNSS_DISABLE_PRIORITY as that's currently a requirement
-	 * by bsdlib.
+	 * in Modem library.
 	 */
 	retval = nrf_setsockopt(drv_data->socket,
 				NRF_SOL_GNSS,
@@ -685,6 +726,7 @@ set_configuration:
 	}
 
 	atomic_set(&drv_data->is_active, 1);
+	atomic_set(&drv_data->timeout_occurred, 0);
 	k_sem_give(&drv_data->thread_run_sem);
 
 	LOG_DBG("GPS operational");
@@ -692,15 +734,22 @@ set_configuration:
 	return retval;
 }
 
-static int setup(struct device *dev)
+static int setup(const struct device *dev)
 {
-	int err = 0;
 	struct gps_drv_data *drv_data = dev->data;
 
 	drv_data->socket = -1;
 	drv_data->dev = dev;
 
 	atomic_set(&drv_data->is_active, 0);
+	atomic_set(&drv_data->timeout_occurred, 0);
+
+	return 0;
+}
+
+static int configure_antenna(void)
+{
+	int err = 0;
 
 #if CONFIG_NRF9160_GPS_SET_MAGPIO
 	err = at_cmd_write(CONFIG_NRF9160_GPS_MAGPIO_STRING,
@@ -729,7 +778,7 @@ static int setup(struct device *dev)
 	return err;
 }
 
-static int stop_gps(struct device *dev, bool is_timeout)
+static int stop_gps(const struct device *dev, bool is_timeout)
 {
 	struct gps_drv_data *drv_data = dev->data;
 	nrf_gnss_delete_mask_t delete_mask = 0;
@@ -756,7 +805,7 @@ static int stop_gps(struct device *dev, bool is_timeout)
 	return 0;
 }
 
-static int stop(struct device *dev)
+static int stop(const struct device *dev)
 {
 	int err = 0;
 	struct gps_drv_data *drv_data = dev->data;
@@ -793,7 +842,7 @@ static void stop_work_fn(struct k_work *work)
 {
 	struct gps_drv_data *drv_data =
 		CONTAINER_OF(work, struct gps_drv_data, stop_work);
-	struct device *dev = drv_data->dev;
+	const struct device *dev = drv_data->dev;
 	struct gps_event evt = {
 		.type = GPS_EVT_SEARCH_STOPPED
 	};
@@ -805,11 +854,11 @@ static void timeout_work_fn(struct k_work *work)
 {
 	struct gps_drv_data *drv_data =
 		CONTAINER_OF(work, struct gps_drv_data, timeout_work);
-	struct device *dev = drv_data->dev;
+	const struct device *dev = drv_data->dev;
 	struct gps_event evt = {
 		.type = GPS_EVT_SEARCH_TIMEOUT
 	};
-
+	atomic_set(&drv_data->timeout_occurred, 1);
 	notify_event(dev, &evt);
 }
 
@@ -825,8 +874,8 @@ static void blocked_work_fn(struct k_work *work)
 	}
 }
 
-static int agps_write(struct device *dev, enum gps_agps_type type, void *data,
-		      size_t data_len)
+static int agps_write(const struct device *dev, enum gps_agps_type type,
+		      void *data, size_t data_len)
 {
 	int err;
 	struct gps_drv_data *drv_data = dev->data;
@@ -844,7 +893,7 @@ static int agps_write(struct device *dev, enum gps_agps_type type, void *data,
 	return 0;
 }
 
-static int init(struct device *dev, gps_event_handler_t handler)
+static int init(const struct device *dev, gps_event_handler_t handler)
 {
 	struct gps_drv_data *drv_data = dev->data;
 	int err;
@@ -861,6 +910,11 @@ static int init(struct device *dev, gps_event_handler_t handler)
 	}
 
 	drv_data->handler = handler;
+
+	err = configure_antenna();
+	if (err) {
+		return err;
+	}
 
 	if (drv_data->socket < 0) {
 		int ret = open_socket(drv_data);
@@ -887,8 +941,9 @@ static int init(struct device *dev, gps_event_handler_t handler)
 	return 0;
 }
 
-
-static struct gps_drv_data gps_drv_data;
+static struct gps_drv_data gps_drv_data = {
+	.socket = -1,
+};
 
 static const struct gps_driver_api gps_api_funcs = {
 	.init = init,
@@ -897,6 +952,7 @@ static const struct gps_driver_api gps_api_funcs = {
 	.agps_write = agps_write,
 };
 
-DEVICE_AND_API_INIT(nrf9160_gps, CONFIG_NRF9160_GPS_DEV_NAME, setup,
-		    &gps_drv_data, NULL, APPLICATION,
-		    CONFIG_NRF9160_GPS_INIT_PRIO, &gps_api_funcs);
+DEVICE_DEFINE(nrf9160_gps, CONFIG_NRF9160_GPS_DEV_NAME,
+	      setup, device_pm_control_nop,
+	      &gps_drv_data, NULL, POST_KERNEL,
+	      CONFIG_NRF9160_GPS_INIT_PRIO, &gps_api_funcs);

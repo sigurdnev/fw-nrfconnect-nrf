@@ -24,6 +24,35 @@
 #define LOG_MODULE_NAME sdc_hci_driver
 #include "common/log.h"
 
+/* As per the section "SoftDevice Controller/Integration with applications"
+ * in the nrfxlib documentation, the controller uses the following channels:
+ */
+#if defined(PPI_PRESENT)
+	/* PPI channels 17 - 31, for the nRF52 Series */
+	#define PPI_CHANNELS_USED_BY_CTLR (BIT_MASK(15) << 17)
+#else
+	/* DPPI channels 0 - 13, for the nRF53 Series */
+	#define PPI_CHANNELS_USED_BY_CTLR BIT_MASK(14)
+#endif
+
+/* Additionally, MPSL requires the following channels (as per the section
+ * "Multiprotocol Service Layer/Integration notes"):
+ */
+#if defined(PPI_PRESENT)
+	/* PPI channel 19, 30, 31, for the nRF52 Series */
+	#define PPI_CHANNELS_USED_BY_MPSL (BIT(19) | BIT(30) | BIT(31))
+#else
+	/* DPPI channels 0 - 2, for the nRF53 Series */
+	#define PPI_CHANNELS_USED_BY_MPSL BIT_MASK(3)
+#endif
+
+/* The following two constants are used in nrfx_glue.h for marking these PPI
+ * channels and groups as occupied and thus unavailable to other modules.
+ */
+const uint32_t z_bt_ctlr_used_nrf_ppi_channels =
+	PPI_CHANNELS_USED_BY_CTLR | PPI_CHANNELS_USED_BY_MPSL;
+const uint32_t z_bt_ctlr_used_nrf_ppi_groups;
+
 static K_SEM_DEFINE(sem_recv, 0, 1);
 
 static struct k_thread recv_thread_data;
@@ -315,7 +344,7 @@ static void recv_thread(void *p1, void *p2, void *p3)
 	ARG_UNUSED(p2);
 	ARG_UNUSED(p3);
 
-	static uint8_t hci_buffer[HCI_MSG_BUFFER_MAX_SIZE];
+	static uint8_t hci_buffer[CONFIG_BT_RX_BUF_LEN];
 
 	bool received_evt = false;
 	bool received_data = false;
@@ -351,7 +380,7 @@ static int hci_driver_open(void)
 			K_THREAD_STACK_SIZEOF(recv_thread_stack), recv_thread,
 			NULL, NULL, NULL, K_PRIO_COOP(CONFIG_SDC_RX_PRIO), 0,
 			K_NO_WAIT);
-	k_thread_name_set(&recv_thread_data, "blectlr recv");
+	k_thread_name_set(&recv_thread_data, "SDC RX");
 
 	uint8_t build_revision[SDC_BUILD_REVISION_SIZE];
 
@@ -418,7 +447,49 @@ static int hci_driver_open(void)
 		return -ENOMEM;
 	}
 
-	if (IS_ENABLED(CONFIG_BT_DATA_LEN_UPDATE)) {
+	if (IS_ENABLED(CONFIG_BT_BROADCASTER)) {
+		if (IS_ENABLED(CONFIG_BT_CTLR_ADV_EXT)) {
+			err = sdc_support_ext_adv();
+			if (err) {
+				return -ENOTSUP;
+			}
+		} else {
+			err = sdc_support_adv();
+			if (err) {
+				return -ENOTSUP;
+			}
+		}
+	}
+
+	if (IS_ENABLED(CONFIG_BT_PERIPHERAL)) {
+		err = sdc_support_slave();
+		if (err) {
+			return -ENOTSUP;
+		}
+	}
+
+	if (IS_ENABLED(CONFIG_BT_OBSERVER)) {
+		if (IS_ENABLED(CONFIG_BT_CTLR_ADV_EXT)) {
+			err = sdc_support_ext_scan();
+			if (err) {
+				return -ENOTSUP;
+			}
+		} else {
+			err = sdc_support_scan();
+			if (err) {
+				return -ENOTSUP;
+			}
+		}
+	}
+
+	if (IS_ENABLED(CONFIG_BT_CENTRAL)) {
+		err = sdc_support_master();
+		if (err) {
+			return -ENOTSUP;
+		}
+	}
+
+	if (IS_ENABLED(CONFIG_BT_CTLR_DATA_LENGTH)) {
 		err = sdc_support_dle();
 		if (err) {
 			return -ENOTSUP;
@@ -507,7 +578,7 @@ void bt_ctlr_set_public_addr(const uint8_t *addr)
 	(void)sdc_hci_cmd_vs_zephyr_write_bd_addr(bd_addr);
 }
 
-static int hci_driver_init(struct device *unused)
+static int hci_driver_init(const struct device *unused)
 {
 	ARG_UNUSED(unused);
 	int err = 0;

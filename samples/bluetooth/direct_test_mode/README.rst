@@ -3,20 +3,24 @@
 Bluetooth: Direct Test Mode
 ###########################
 
-This sample enables the Direct Test Mode functions described in `Bluetooth Core Specification`_: Version 5.0, Vol. 6, Part F.
+.. contents::
+   :local:
+   :depth: 2
+
+This sample enables the Direct Test Mode functions described in `Bluetooth Core Specification`_: Version 5.2, Vol. 6, Part F.
 
 Overview
 ********
 
-The sample uses Direct Test Mode to test the operation of the following features of the radio:
+The sample uses Direct Test Mode (DTM) to test the operation of the following features of the radio:
 
-* transmission power and receiver sensitivity,
-* frequency offset and drift,
-* modulation characteristics,
-* packet error rate,
-* intermodulation performance.
+* Transmission power and receiver sensitivity
+* Frequency offset and drift
+* Modulation characteristics
+* Packet error rate
+* Intermodulation performance
 
-Test procedures are defined in the document `Bluetooth Low Energy RF PHY Test Specification`_: Document number RF-PHY.TS/5.0.0.
+Test procedures are defined in the document `Bluetooth Low Energy RF PHY Test Specification`_: Document number RF-PHY.TS.p15
 
 You can carry out conformance tests using dedicated test equipment, such as the Anritsu MT8852 or similar, with an nRF5 running the DTM sample set as device under test (DUT).
 
@@ -86,7 +90,45 @@ The DTM sample supports all four PHYs specified in DTM, but not all devices supp
    * - LE Coded S=2
      - Yes
 
-Vendor-Specific packet payload
+Bluetooth Direction Finding support
+===================================
+
+The DTM sample supports all Bluetooth Direction Finding modes specified in DTM.
+
+.. list-table:: Supported Bluetooth Direction Finding modes
+   :header-rows: 1
+
+   * - Direction Finding mode
+     - nRF5340
+   * - AoD 1 us slot
+     - Yes
+   * - AoD 2 us slot
+     - Yes
+   * - AoA
+     - Yes
+
+The following antenna switching patterns are possible:
+
+* 1, 2, 3, ..., N
+* 1, 2, 3, ..., N, N - 1, N - 2, ..., 1
+
+The application supports a maximum of 19 antennas in the direction finding mode.
+The RADIO can control up to 8 GPIO pins for the purpose of controlling the external antenna switches used in direction finding.
+
+The antenna is chosen by writing consecutive numbers to the SWITCHPATTERN register.
+This means that the antenna GPIO pins act like 8-bit registers.
+In other words, for the first antenna, antenna pin 1 is active, for the second antenna, pin 2 is active, for the third antenna, pins 1 and 2 are active, and so on.
+
+nRF21540 front-end module
+=========================
+
+.. |fem_file_path| replace:: :file:`samples/bluetooth/direct_test_mode`
+
+.. include:: /includes/sample_fem_support.txt
+
+You can configure the transmitted power gain and activation delay in nRF21540 using vendor-specific commands, see `Vendor-specific packet payload`_.
+
+Vendor-specific packet payload
 ==============================
 
 The Bluetooth Low Energy 2-wire UART DTM interface standard reserves the Packet Type, also called payload parameter, with binary value ``11`` for a Vendor Specific packet payload.
@@ -109,6 +151,16 @@ Vendor specific commands can be divided into different categories as follows:
   The two most significant bits are calculated by the DTM module.
   This is possible because the 6 least significant bits of all valid TX power values are unique.
   The TX power can be modified only when no Transmitter Test or Receiver Test is running.
+* If the Length field is set to ``3``(symbol ``NRF21540_ANTENNA_SELECT``), the Frequency field sets the nRF21540 FEM antenna.
+  The valid values are:
+
+     * 0 - ANT1 enabled, ANT2 disabled
+     * 1 - ANT1 disabled, ANT2 enabled
+
+* If the Length field is set to ``4`` (symbol ``NRF21540_GAIN_SET``), the Frequency field sets the nRF21540 FEM TX gain value in arbitrary units.
+  The valid gain values are specified in the nRF21540 product-specific range from 0 to 31.
+* If the Length field is set to ``5`` (symbol ``NRF21540_ACTIVE_DELAY_SET``), the Frequency field sets the nRF21540 FEM activation delay in microseconds relative to a radio start.
+  By default, this value is set to (radio ramp-up time - nRF21540 TX/RX settling time).
 * All other values of Frequency and Length field are reserved.
 
 The DTM-to-Serial adaptation layer
@@ -131,15 +183,13 @@ If you want to view the debug messages, follow the procedure in :ref:`testing_rt
 Requirements
 ************
 
-* The following development kit:
+The sample supports the following development kit:
 
 .. table-from-rows:: /includes/sample_board_rows.txt
    :header: heading
-   :rows: nrf5340pdk_nrf5340_cpunet
+   :rows: nrf5340dk_nrf5340_cpunet, nrf21540dk_nrf52840
 
-* The Network core
-
-* One of the following testing devices:
+Additionally, the sample requires one of the following testing devices:
 
   * Dedicated test equipment, like an Anritsu MT8852 tester.
     See :ref:`direct_test_mode_testing_anritsu`.
@@ -178,7 +228,7 @@ Testing
 After programming the sample to your development kit, you can test it in the three following ways.
 
 .. note::
-   For the nRF5340 development kit, see :ref:`logging_cpunet` for information on how to make the PC terminal work with the network core.
+   For the |nRF5340DKnoref|, see :ref:`logging_cpunet` for information about the COM terminals on which the logging output is available.
 
 .. _direct_test_mode_testing_anritsu:
 

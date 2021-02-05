@@ -32,7 +32,7 @@ class OptionsFromKconfig(SphinxDirective):
         inside the parsed Kconfig file itself will be available to be used by
         this extension.
         '''
-        kconfiglib._SOURCE_TOKENS = frozenset({})
+        kconfiglib._SOURCE_TOKENS = kconfiglib._REL_SOURCE_TOKENS
         kconfiglib.Kconfig._parse_error = lambda self_, msg: None
 
     @staticmethod
@@ -84,17 +84,25 @@ class OptionsFromKconfig(SphinxDirective):
                    (prefix.startswith("'") and prefix.endswith("'")):
                     prefix = prefix[1:-1]
                 text += prefix
-            help_ = f'{sym.nodes[0].prompt[0]}'
+            try:
+                prompt_ = f'{sym.nodes[0].prompt[0]}'
+            except Exception:
+                prompt_ = ''
             if prefix is not None:
-                text += help_[:1].lower() + help_[1:]
+                text += prompt_[:1].lower() + prompt_[1:]
             else:
-                text += help_
+                text += prompt_
             if suffix is not None:
                 if (suffix.startswith('"') and suffix.endswith('"')) or \
                    (suffix.startswith("'") and suffix.endswith("'")):
                     suffix = suffix[1:-1]
                 text += suffix
             lines.append(f'{text}\n')
+            try:
+                help_ = sym.nodes[0].help
+                lines.append(f'{help_}\n')
+            except Exception:
+                pass
 
         lines = statemachine.string2lines('\n'.join(lines))
         self.state_machine.insert_input(lines, path)

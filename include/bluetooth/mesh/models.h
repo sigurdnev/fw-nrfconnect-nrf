@@ -48,10 +48,18 @@
 #include <bluetooth/mesh/light_ctl_cli.h>
 #include <bluetooth/mesh/light_temp_srv.h>
 #include <bluetooth/mesh/light_ctl_srv.h>
+#include <bluetooth/mesh/light_xyl_cli.h>
+#include <bluetooth/mesh/light_xyl_srv.h>
+#include <bluetooth/mesh/light_hsl_cli.h>
+#include <bluetooth/mesh/light_hsl_srv.h>
+#include <bluetooth/mesh/light_sat_srv.h>
+#include <bluetooth/mesh/light_hue_srv.h>
 
 /* Time and Scene models */
 #include <bluetooth/mesh/time_cli.h>
 #include <bluetooth/mesh/time_srv.h>
+#include <bluetooth/mesh/scene_cli.h>
+#include <bluetooth/mesh/scene_srv.h>
 
 /** @brief Check whether the model publishes to a unicast address.
  *

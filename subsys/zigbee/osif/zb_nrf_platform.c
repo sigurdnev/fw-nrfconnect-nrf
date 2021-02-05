@@ -10,6 +10,11 @@
 #include <logging/log.h>
 #include <init.h>
 
+#include <hal/nrf_power.h>
+#if !NRF_POWER_HAS_RESETREAS
+#include <hal/nrf_reset.h>
+#endif
+
 #ifdef CONFIG_ZIGBEE_SHELL
 #include <zigbee_cli.h>
 #endif
@@ -138,18 +143,13 @@ static void zb_app_cb_process(zb_bufid_t bufid)
 		case ZB_CALLBACK_TYPE_SINGLE_PARAM:
 			ret_code = zb_schedule_app_callback(
 					new_app_cb.func,
-					(zb_uint8_t)new_app_cb.param,
-					ZB_FALSE,
-					0,
-					ZB_FALSE);
+					(zb_uint8_t)new_app_cb.param);
 			break;
 		case ZB_CALLBACK_TYPE_TWO_PARAMS:
-			ret_code = zb_schedule_app_callback(
-					(zb_callback_t)(new_app_cb.func2),
+			ret_code = zb_schedule_app_callback2(
+					new_app_cb.func2,
 					(zb_uint8_t)new_app_cb.param,
-					ZB_TRUE,
-					new_app_cb.user_param,
-					ZB_FALSE);
+					new_app_cb.user_param);
 			break;
 		case ZB_CALLBACK_TYPE_ALARM_SET:
 		{
@@ -239,8 +239,7 @@ static void zb_app_cb_process_schedule(struct k_work *item)
 	 *
 	 * Note: the ZB_SCHEDULE_APP_CALLBACK is thread-safe.
 	 */
-	while (zb_schedule_app_callback(zb_app_cb_process,
-					0, ZB_FALSE, 0, ZB_FALSE) != RET_OK) {
+	while (zb_schedule_app_callback(zb_app_cb_process, 0) != RET_OK) {
 		k_sleep(K_MSEC(1000));
 	}
 	zigbee_event_notify(ZIGBEE_EVENT_APP);
@@ -248,10 +247,8 @@ static void zb_app_cb_process_schedule(struct k_work *item)
 	(void)item;
 }
 
-static int zigbee_init(struct device *unused)
+int zigbee_init(void)
 {
-	ARG_UNUSED(unused);
-
 	/* Initialise work queue for processing app callback and alarms. */
 	k_work_init(&zb_app_cb_work, zb_app_cb_process_schedule);
 
@@ -259,10 +256,14 @@ static int zigbee_init(struct device *unused)
 	/* Set Zigbee stack logging level and traffic dump subsystem. */
 	ZB_SET_TRACE_LEVEL(CONFIG_ZBOSS_TRACE_LOG_LEVEL);
 	ZB_SET_TRACE_MASK(CONFIG_ZBOSS_TRACE_MASK);
+#if CONFIG_ZBOSS_TRAF_DUMP
+	ZB_SET_TRAF_DUMP_ON();
+#else /* CONFIG_ZBOSS_TRAF_DUMP */
 	ZB_SET_TRAF_DUMP_OFF();
+#endif /* CONFIG_ZBOSS_TRAF_DUMP */
 #endif /* ZB_TRACE_LEVEL */
 
-#ifndef CONFIG_ZB_TEST_MODE
+#ifndef CONFIG_ZB_TEST_MODE_MAC
 	/* Initialize Zigbee stack. */
 	ZB_INIT("zigbee_thread");
 
@@ -297,7 +298,7 @@ static int zigbee_init(struct device *unused)
 #error Zigbee device role undefined!
 #endif
 
-#endif /* CONFIG_ZB_TEST_MODE */
+#endif /* CONFIG_ZB_TEST_MODE_MAC */
 
 	return 0;
 }
@@ -528,22 +529,6 @@ __weak zb_uint32_t zb_get_utc_time(void)
 	return ZB_TIME_BEACON_INTERVAL_TO_MSEC(ZB_TIMER_GET()) / 1000;
 }
 
-/**@brief Read IEEE long address from FICR registers. */
-void zb_osif_get_ieee_eui64(zb_ieee_addr_t ieee_eui64)
-{
-	uint64_t factoryAddress;
-
-	/* Read random address from FICR. */
-	factoryAddress = (uint64_t)NRF_FICR->DEVICEID[0] << 32;
-	factoryAddress |= NRF_FICR->DEVICEID[1];
-
-	/* Set constant manufacturer ID to use MAC compression mechanisms. */
-	factoryAddress &= 0x000000FFFFFFFFFFLL;
-	factoryAddress |= (uint64_t)(CONFIG_ZIGBEE_VENDOR_OUI) << 40;
-
-	memcpy(ieee_eui64, &factoryAddress, sizeof(factoryAddress));
-}
-
 void zigbee_event_notify(zigbee_event_t event)
 {
 	k_poll_signal_raise(&zigbee_sig, event);
@@ -587,4 +572,56 @@ void zigbee_enable(void)
 	k_thread_name_set(&zboss_thread_data, "zboss");
 }
 
-SYS_INIT(zigbee_init, POST_KERNEL, CONFIG_ZBOSS_DEFAULT_THREAD_PRIORITY);
+/**
+ * @brief Get the reason that triggered the last reset
+ *
+ * @return @ref reset_source
+ * */
+zb_uint8_t zb_get_reset_source(void)
+{
+	uint32_t reas;
+
+#if NRF_POWER_HAS_RESETREAS
+
+	reas = nrf_power_resetreas_get(NRF_POWER);
+	nrf_power_resetreas_clear(NRF_POWER, reas);
+	if (reas & NRF_POWER_RESETREAS_RESETPIN_MASK) {
+		return ZB_RESET_SRC_RESET_PIN;
+	} else if (reas & NRF_POWER_RESETREAS_SREQ_MASK) {
+		return ZB_RESET_SRC_SW_RESET;
+	} else if (reas) {
+		return ZB_RESET_SRC_OTHER;
+	} else {
+		return ZB_RESET_SRC_POWER_ON;
+	}
+
+#else
+
+	reas = nrf_reset_resetreas_get(NRF_RESET);
+	nrf_reset_resetreas_clear(NRF_RESET, reas);
+	if (reas & NRF_RESET_RESETREAS_RESETPIN_MASK) {
+		return ZB_RESET_SRC_RESET_PIN;
+	} else if (reas & NRF_RESET_RESETREAS_SREQ_MASK) {
+		return ZB_RESET_SRC_SW_RESET;
+	} else if (reas) {
+		return ZB_RESET_SRC_OTHER;
+	} else {
+		return ZB_RESET_SRC_POWER_ON;
+	}
+
+#endif
+}
+
+ZB_WEAK_PRE zb_uint32_t ZB_WEAK zb_osif_get_fw_version(void)
+{
+	return 0x01;
+}
+
+ZB_WEAK_PRE zb_uint32_t ZB_WEAK zb_osif_get_ncp_protocol_version(void)
+{
+#ifdef ZB_NCP_PROTOCOL_VERSION
+	return ZB_NCP_PROTOCOL_VERSION;
+#else /* ZB_NCP_PROTOCOL_VERSION */
+	return 0x01;
+#endif /* ZB_NCP_PROTOCOL_VERSION */
+}

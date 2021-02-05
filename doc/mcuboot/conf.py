@@ -94,7 +94,7 @@ master_doc = 'wrapper'
 
 # General information about the project.
 project = 'MCUboot'
-copyright = '2019-2020'
+copyright = '2019-2021'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -181,6 +181,6 @@ intersphinx_mapping = {
 }
 
 def setup(app):
-    app.add_stylesheet("css/common.css")
-    app.add_stylesheet("css/mcuboot.css")
+    app.add_css_file("css/common.css")
+    app.add_css_file("css/mcuboot.css")
     app.add_js_file("js/ncs.js")

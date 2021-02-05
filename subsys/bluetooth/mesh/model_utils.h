@@ -72,6 +72,11 @@ static inline void model_ack_init(struct bt_mesh_model_ack_ctx *ack)
 	k_sem_init(&ack->sem, 0, 1);
 }
 
+static inline void model_ack_reset(struct bt_mesh_model_ack_ctx *ack)
+{
+	k_sem_reset(&ack->sem);
+}
+
 static inline int model_ack_ctx_prepare(struct bt_mesh_model_ack_ctx *ack,
 					uint32_t op, uint16_t dst, void *user_data)
 {
@@ -155,6 +160,14 @@ static inline bool
 model_transition_is_active(const struct bt_mesh_model_transition *transition)
 {
 	return (transition->time > 0 || transition->delay > 0);
+}
+
+static inline bool
+model_transition_is_invalid(const struct bt_mesh_model_transition *transition)
+{
+	return (transition != NULL &&
+		(transition->time > BT_MESH_MODEL_TRANSITION_TIME_MAX_MS ||
+		 transition->delay > BT_MESH_MODEL_DELAY_TIME_MAX_MS));
 }
 
 #endif /* MODEL_UTILS_H__ */

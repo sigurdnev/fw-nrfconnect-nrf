@@ -1,5 +1,9 @@
 #!/usr/bin/env python
 #
+# Copyright (c) 2020 Nordic Semiconductor ASA
+#
+# SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+#
 # Copyright (c) 2016, The OpenThread Authors.
 # All rights reserved.
 #
@@ -1278,7 +1282,7 @@ class nRF52840(IThci):
         try:
             self._sendline('factoryreset')
             self._read()
-            time.sleep(1.5)
+            time.sleep(0.5)
 
         except Exception as e:
             ModuleHelper.WriteIntoDebugLogger('reset() Error: ' + str(e))

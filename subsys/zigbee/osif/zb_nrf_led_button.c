@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
  */
+
 #include <logging/log.h>
 #include <dk_buttons_and_leds.h>
 #include <drivers/pwm.h>
@@ -23,7 +24,7 @@
 #ifdef CONFIG_ZIGBEE_USE_DIMMABLE_LED
 static uint32_t pwm_channel;
 static pwm_flags_t pwm_flags;
-static struct device *led_pwm_dev;
+static const struct device *led_pwm_dev;
 #endif /* CONFIG_ZIGBEE_USE_DIMMABLE_LED */
 
 LOG_MODULE_DECLARE(zboss_osif, CONFIG_ZBOSS_OSIF_LOG_LEVEL);

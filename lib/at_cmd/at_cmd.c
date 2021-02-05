@@ -9,10 +9,10 @@
 #include <stdio.h>
 #include <net/socket.h>
 #include <init.h>
-#include <bsd_limits.h>
+#include <nrf_modem_limits.h>
 
 #include <modem/at_cmd.h>
-#include <modem/bsdlib.h>
+#include <modem/nrf_modem_lib.h>
 
 LOG_MODULE_REGISTER(at_cmd, CONFIG_AT_CMD_LOG_LEVEL);
 
@@ -74,6 +74,25 @@ static int open_socket(void)
 	}
 
 	return 0;
+}
+
+/*
+ * Do any validation of an AT command not performed by the lower layers or
+ * by the modem.
+ */
+static int check_cmd(const char *cmd)
+{
+	if (cmd == NULL) {
+		return -EINVAL;
+	}
+
+	/* Check for the presence one printable non-whitespace character */
+	for (const char *c = cmd; *c != '\0'; c++) {
+		if (*c > ' ') {
+			return 0;
+		}
+	}
+	return -EINVAL;
 }
 
 static int get_return_code(char *buf, size_t bytes_read, struct resp_item *ret)
@@ -231,13 +250,13 @@ static void socket_thread_fn(void *arg1, void *arg2, void *arg3)
 				LOG_DBG("AT host is going down, sleeping");
 				atomic_set(&shutdown_mode, 1);
 				close(common_socket_fd);
-				bsdlib_shutdown_wait();
+				nrf_modem_lib_shutdown_wait();
 				LOG_DBG("AT host available, "
 					"starting the thread again");
 				atomic_clear(&shutdown_mode);
 				if (open_socket() != 0) {
 					LOG_ERR("Failed to open AT socket "
-						"after bsdlib init, "
+						"after nrf_modem_lib init, "
 						"err: %d", errno);
 				}
 
@@ -245,7 +264,7 @@ static void socket_thread_fn(void *arg1, void *arg2, void *arg3)
 				continue;
 			} else {
 				LOG_ERR("AT socket recv failed with err %d",
-					bytes_read);
+					errno);
 			}
 
 			if ((close(common_socket_fd) == 0) &&
@@ -324,6 +343,12 @@ int at_cmd_write_with_callback(const char *const cmd,
 	}
 
 	if (cmd == NULL) {
+		LOG_ERR("cmd is NULL");
+		return -EINVAL;
+	}
+
+	if (check_cmd(cmd)) {
+		LOG_ERR("Invalid command");
 		return -EINVAL;
 	}
 
@@ -363,6 +388,14 @@ int at_cmd_write(const char *const cmd,
 
 	if (cmd == NULL) {
 		LOG_ERR("cmd is NULL");
+		if (state) {
+			*state = AT_CMD_ERROR_QUEUE;
+		}
+		return -EINVAL;
+	}
+
+	if (check_cmd(cmd)) {
+		LOG_ERR("Invalid command");
 		if (state) {
 			*state = AT_CMD_ERROR_QUEUE;
 		}
@@ -412,7 +445,7 @@ void at_cmd_set_notification_handler(at_cmd_handler_t handler)
 	notification_handler = handler;
 }
 
-static int at_cmd_driver_init(struct device *dev)
+static int at_cmd_driver_init(const struct device *dev)
 {
 	static bool initialized;
 

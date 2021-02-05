@@ -445,19 +445,20 @@ _UPSTREAM = 'https://github.com/zephyrproject-rtos/zephyr'
 # Set of project paths blocked from inclusion in the NCS.
 _BLOCKED_PROJECTS = set(
     Path(p) for p in
-    ['modules/hal/altera',
+    ['modules/audio/sof',
+     'modules/hal/altera',
      'modules/hal/atmel',
      'modules/hal/cypress',
-     'modules/hal/esp-idf',
+     'modules/hal/espressif',
      'modules/hal/infineon',
      'modules/hal/microchip',
      'modules/hal/nuvoton',
      'modules/hal/nxp',
      'modules/hal/openisa',
      'modules/hal/qmsi',
+     'modules/hal/quicklogic',
      'modules/hal/silabs',
      'modules/hal/stm32',
      'modules/hal/ti',
      'modules/hal/xtensa',
-     'modules/tee/tfm',
      ])

@@ -6,9 +6,9 @@
 
 /**
  * @file
- * @defgroup bt_mesh_lvl Bluetooth Mesh Generic Level models
+ * @defgroup bt_mesh_lvl Bluetooth mesh Generic Level models
  * @{
- * @brief Common API for the Bluetooth Mesh Generic Level models.
+ * @brief Common API for the Bluetooth mesh Generic Level models.
  */
 #ifndef BT_MESH_GEN_LVL_H__
 #define BT_MESH_GEN_LVL_H__
@@ -103,8 +103,9 @@ struct bt_mesh_lvl_status {
 	 */
 	int16_t target;
 	/**
-	 * Time remaining of the ongoing transition, or @em K_FOREVER.
-	 * If there's no ongoing transition, @c remaining_time is 0.
+	 * Time remaining of the ongoing transition (in milliseconds),
+	 * or @em SYS_FOREVER_MS. If there's no ongoing transition,
+	 * @c remaining_time is 0.
 	 */
 	int32_t remaining_time;
 };

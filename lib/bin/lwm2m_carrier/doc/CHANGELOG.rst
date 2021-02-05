@@ -3,7 +3,67 @@
 Changelog
 #########
 
+.. contents::
+   :local:
+   :depth: 2
+
 All notable changes to this project are documented in this file.
+
+liblwm2m_carrier 0.10.2
+***********************
+
+Release for modem firmware versions 1.2.3 and 1.1.4, and |NCS| 1.4.2.
+
+Certification status
+====================
+
+For certification status, see `Mobile network operator certifications`_.
+
+Changes
+=======
+
+* :c:macro:`LWM2M_CARRIER_EVENT_LTE_READY` will be sent to the application even when the device is outside of AT&T and Verizon networks.
+* The interval to check for sufficient battery charge during FOTA has been reduced from five minutes to one minute.
+
+liblwm2m_carrier 0.10.1
+***********************
+
+Release for modem firmware versions 1.2.2 and 1.1.4, and |NCS| 1.4.1.
+
+Certification status
+====================
+
+For certification status, see `Mobile network operator certifications`_.
+
+Changes
+=======
+
+* Minor fixes and improvements.
+
+liblwm2m_carrier 0.10.0
+***********************
+
+Snapshot release for modem firmware version 1.2.2 and the upcoming version 1.1.4, and |NCS| 1.4.0.
+
+This release is intended to let users begin integration towards the AT&T and Verizon device management platforms.
+Modem firmware version 1.1.4 must be used for Verizon, and the modem firmware version 1.2.2 must be used for AT&T.
+
+The snapshot can be used for development and testing only.
+It is not ready for certification.
+
+Certification status
+====================
+
+The library is not certified with any carrier.
+
+Changes
+=======
+
+* Reduced the required amount of stack and heap allocated by the library.
+* Reduced the power consumption of the library.
+* Renamed the event :c:macro:`LWM2M_CARRIER_EVENT_READY` to :c:macro:`LWM2M_CARRIER_EVENT_REGISTERED`.
+* Introduced a new event :c:macro:`LWM2M_CARRIER_EVENT_LTE_READY`, to indicate that the LTE link can be used by the application.
+* The Modem DFU socket can now be used by the application when it is not needed by the library.
 
 liblwm2m_carrier 0.9.1
 **********************
@@ -142,7 +202,7 @@ Changes
 =======
 
 * Numerous stability fixes and improvements.
-* Updated bsdlib version dependency.
+* Updated Modem library version dependency.
 * Fixed an issue where high LTE network activity could prevent modem firmware updates over LwM2M.
 
 * Added the following library events:

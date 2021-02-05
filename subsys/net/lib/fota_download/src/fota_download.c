@@ -11,11 +11,13 @@
 #include <dfu/dfu_target.h>
 #include <pm_config.h>
 
-#ifdef PM_S1_ADDRESS
+#if defined(PM_S1_ADDRESS) || defined(CONFIG_DFU_TARGET_MCUBOOT)
 /* MCUBoot support is required */
 #include <fw_info.h>
+#ifdef CONFIG_TRUSTED_EXECUTION_NONSECURE
 #include <secure_services.h>
-#include <dfu_target_mcuboot.h>
+#endif
+#include <dfu/dfu_target_mcuboot.h>
 #endif
 
 LOG_MODULE_REGISTER(fota_download, CONFIG_FOTA_DOWNLOAD_LOG_LEVEL);
@@ -24,12 +26,25 @@ static fota_download_callback_t callback;
 static struct download_client   dlc;
 static struct k_delayed_work    dlc_with_offset_work;
 static int socket_retries_left;
-
+#ifdef CONFIG_DFU_TARGET_MCUBOOT
+static uint8_t mcuboot_buf[CONFIG_FOTA_DOWNLOAD_MCUBOOT_FLASH_BUF_SZ];
+#endif
 static void send_evt(enum fota_download_evt_id id)
 {
 	__ASSERT(id != FOTA_DOWNLOAD_EVT_PROGRESS, "use send_progress");
+	__ASSERT(id != FOTA_DOWNLOAD_EVT_ERROR, "use send_error_evt");
 	const struct fota_download_evt evt = {
 		.id = id
+	};
+	callback(&evt);
+}
+
+static void send_error_evt(enum fota_download_error_cause cause)
+{
+	__ASSERT(cause != FOTA_DOWNLOAD_ERROR_CAUSE_NO_ERROR, "use a valid error cause");
+	const struct fota_download_evt evt = {
+		.id = FOTA_DOWNLOAD_EVT_ERROR,
+		.cause = cause
 	};
 	callback(&evt);
 }
@@ -53,7 +68,7 @@ static void dfu_target_callback_handler(enum dfu_target_evt_id evt)
 		send_evt(FOTA_DOWNLOAD_EVT_ERASE_DONE);
 		break;
 	default:
-		send_evt(FOTA_DOWNLOAD_EVT_ERROR);
+		send_error_evt(FOTA_DOWNLOAD_ERROR_CAUSE_DOWNLOAD_FAILED);
 	}
 }
 
@@ -75,7 +90,7 @@ static int download_client_callback(const struct download_client_evt *event)
 			if (err != 0) {
 				LOG_DBG("download_client_file_size_get err: %d",
 					err);
-				send_evt(FOTA_DOWNLOAD_EVT_ERROR);
+				send_error_evt(FOTA_DOWNLOAD_ERROR_CAUSE_DOWNLOAD_FAILED);
 				return err;
 			}
 			first_fragment = false;
@@ -85,7 +100,7 @@ static int download_client_callback(const struct download_client_evt *event)
 					      dfu_target_callback_handler);
 			if ((err < 0) && (err != -EBUSY)) {
 				LOG_ERR("dfu_target_init error %d", err);
-				send_evt(FOTA_DOWNLOAD_EVT_ERROR);
+				send_error_evt(FOTA_DOWNLOAD_ERROR_CAUSE_DOWNLOAD_FAILED);
 				int res = dfu_target_reset();
 
 				if (res != 0) {
@@ -99,7 +114,7 @@ static int download_client_callback(const struct download_client_evt *event)
 			if (err != 0) {
 				LOG_DBG("unable to get dfu target offset err: "
 					"%d", err);
-				send_evt(FOTA_DOWNLOAD_EVT_ERROR);
+				send_error_evt(FOTA_DOWNLOAD_ERROR_CAUSE_DOWNLOAD_FAILED);
 			}
 
 			if (offset != 0) {
@@ -126,7 +141,7 @@ static int download_client_callback(const struct download_client_evt *event)
 			}
 			first_fragment = true;
 			(void) download_client_disconnect(&dlc);
-			send_evt(FOTA_DOWNLOAD_EVT_ERROR);
+			send_error_evt(FOTA_DOWNLOAD_ERROR_CAUSE_INVALID_UPDATE);
 			return err;
 		}
 
@@ -136,18 +151,18 @@ static int download_client_callback(const struct download_client_evt *event)
 			if (err != 0) {
 				LOG_DBG("unable to get dfu target "
 						"offset err: %d", err);
-				send_evt(FOTA_DOWNLOAD_EVT_ERROR);
+				send_error_evt(FOTA_DOWNLOAD_ERROR_CAUSE_DOWNLOAD_FAILED);
 				return err;
 			}
 
 			if (file_size == 0) {
 				LOG_DBG("invalid file size: %d", file_size);
-				send_evt(FOTA_DOWNLOAD_EVT_ERROR);
+				send_error_evt(FOTA_DOWNLOAD_ERROR_CAUSE_DOWNLOAD_FAILED);
 				return err;
 			}
 
 			send_progress((offset * 100) / file_size);
-			LOG_DBG("Progress: %d/%d%%", offset, file_size);
+			LOG_DBG("Progress: %d/%d bytes", offset, file_size);
 		}
 	break;
 	}
@@ -156,13 +171,13 @@ static int download_client_callback(const struct download_client_evt *event)
 		err = dfu_target_done(true);
 		if (err != 0) {
 			LOG_ERR("dfu_target_done error: %d", err);
-			send_evt(FOTA_DOWNLOAD_EVT_ERROR);
+			send_error_evt(FOTA_DOWNLOAD_ERROR_CAUSE_DOWNLOAD_FAILED);
 			return err;
 		}
 
 		err = download_client_disconnect(&dlc);
 		if (err != 0) {
-			send_evt(FOTA_DOWNLOAD_EVT_ERROR);
+			send_error_evt(FOTA_DOWNLOAD_ERROR_CAUSE_DOWNLOAD_FAILED);
 			return err;
 		}
 		send_evt(FOTA_DOWNLOAD_EVT_FINISHED);
@@ -192,7 +207,7 @@ static int download_client_callback(const struct download_client_evt *event)
 					"used by dfu_target.");
 			}
 			first_fragment = true;
-			send_evt(FOTA_DOWNLOAD_EVT_ERROR);
+			send_error_evt(FOTA_DOWNLOAD_ERROR_CAUSE_DOWNLOAD_FAILED);
 			/* Return non-zero to tell download_client to stop */
 			return event->error;
 		}
@@ -238,6 +253,7 @@ int fota_download_start(const char *host, const char *file, int sec_tag,
 		.sec_tag = sec_tag,
 		.apn = apn,
 		.frag_size_override = fragment_size,
+		.set_tls_hostname = (sec_tag != -1),
 	};
 
 	if (host == NULL || file == NULL || callback == NULL) {
@@ -252,20 +268,28 @@ int fota_download_start(const char *host, const char *file, int sec_tag,
 	 * space separated file is given.
 	 */
 	const char *update;
-	struct fw_info s0;
-	struct fw_info s1;
+	bool s0_active;
+#ifdef CONFIG_TRUSTED_EXECUTION_NONSECURE
 
-	err = spm_firmware_info(PM_S0_ADDRESS, &s0);
+	err = spm_s0_active(PM_S0_ADDRESS, PM_S1_ADDRESS, &s0_active);
 	if (err != 0) {
 		return err;
 	}
+#else /* CONFIG_TRUSTED_EXECUTION_NONSECURE */
+	const struct fw_info *tmp_info;
 
-	err = spm_firmware_info(PM_S1_ADDRESS, &s1);
-	if (err != 0) {
-		return err;
+	tmp_info = fw_info_find(PM_S0_ADDRESS);
+	if (tmp_info == NULL) {
+		return -EFAULT;
 	}
+	memcpy(&s0, tmp_info, sizeof(s0));
 
-	bool s0_active = s0.version >= s1.version;
+	tmp_info = fw_info_find(PM_S1_ADDRESS);
+	if (tmp_info == NULL) {
+		return -EFAULT;
+	}
+	memcpy(&s1, tmp_info, sizeof(s1));
+#endif /* CONFIG_TRUSTED_EXECUTION_NONSECURE */
 
 	err = dfu_ctx_mcuboot_set_b1_file(file, s0_active, &update);
 	if (err != 0) {
@@ -298,12 +322,23 @@ int fota_download_init(fota_download_callback_t client_callback)
 		return -EINVAL;
 	}
 
+	int err;
+
 	callback = client_callback;
+
+#ifdef CONFIG_DFU_TARGET_MCUBOOT
+	/* Set the required buffer for MCUboot targets */
+	err = dfu_target_mcuboot_set_buf(mcuboot_buf, sizeof(mcuboot_buf));
+	if (err) {
+		LOG_ERR("%s failed to set MCUboot flash buffer %d",
+			__func__, err);
+		return err;
+	}
+#endif
 
 	k_delayed_work_init(&dlc_with_offset_work, download_with_offset);
 
-	int err = download_client_init(&dlc, download_client_callback);
-
+	err = download_client_init(&dlc, download_client_callback);
 	if (err != 0) {
 		return err;
 	}

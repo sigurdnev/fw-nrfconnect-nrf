@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019 Nordic Semiconductor ASA
+ * Copyright (c) 2019-2021 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
  */
@@ -10,7 +10,6 @@
 #include <zephyr/types.h>
 #include <toolchain/common.h>
 #include <net/socket.h>
-#include <nrf_socket.h>
 #include <net/tls_credentials.h>
 #include <net/download_client.h>
 #include <logging/log.h>
@@ -46,15 +45,20 @@ static const char *str_family(int family)
 	}
 }
 
-static int socket_timeout_set(int fd)
+static int socket_timeout_set(int fd, int type)
 {
 	int err;
+	uint32_t timeout_ms;
 
-	if (CONFIG_DOWNLOAD_CLIENT_SOCK_TIMEOUT_MS == SYS_FOREVER_MS) {
-		return 0;
+	if (type == SOCK_STREAM) {
+		timeout_ms = CONFIG_DOWNLOAD_CLIENT_TCP_SOCK_TIMEO_MS;
+	} else {
+		timeout_ms = CONFIG_DOWNLOAD_CLIENT_UDP_SOCK_TIMEO_MS;
 	}
 
-	const uint32_t timeout_ms = CONFIG_DOWNLOAD_CLIENT_SOCK_TIMEOUT_MS;
+	if (timeout_ms <= 0) {
+		return 0;
+	}
 
 	struct timeval timeo = {
 		.tv_sec = (timeout_ms / 1000),
@@ -97,6 +101,30 @@ static int socket_sectag_set(int fd, int sec_tag)
 			 sizeof(sec_tag_t) * ARRAY_SIZE(sec_tag_list));
 	if (err) {
 		LOG_ERR("Failed to setup socket security tag, errno %d", errno);
+		return -errno;
+	}
+
+	return 0;
+}
+
+static int socket_tls_hostname_set(int fd, const char * const hostname)
+{
+	__ASSERT_NO_MSG(hostname);
+
+	char parsed_host[HOSTNAME_SIZE];
+	int err;
+
+	err = url_parse_host(hostname, parsed_host, sizeof(parsed_host));
+	if (err) {
+		LOG_ERR("Failed to parse host, err %d", err);
+		return err;
+	}
+
+	err = setsockopt(fd, SOL_TLS, TLS_HOSTNAME, parsed_host,
+			 strlen(parsed_host));
+	if (err) {
+		LOG_ERR("Failed to setup TLS hostname (%s), errno %d",
+			log_strdup(parsed_host), errno);
 		return -errno;
 	}
 
@@ -197,6 +225,11 @@ static int client_connect(struct download_client *dl, const char *host,
 		}
 	}
 
+	if (dl->config.sec_tag == -1 && dl->config.set_tls_hostname) {
+		LOG_WRN("set_tls_hostname flag is set for non-TLS connection");
+		return -EINVAL;
+	}
+
 	err = url_parse_port(host, &port);
 	if (err) {
 		switch (dl->proto) {
@@ -251,6 +284,19 @@ static int client_connect(struct download_client *dl, const char *host,
 		if (err) {
 			goto cleanup;
 		}
+
+		if (dl->config.set_tls_hostname) {
+			err = socket_tls_hostname_set(*fd, host);
+			if (err) {
+				goto cleanup;
+			}
+		}
+	}
+
+	/* Set socket timeout, if configured */
+	err = socket_timeout_set(*fd, type);
+	if (err) {
+		goto cleanup;
 	}
 
 	LOG_INF("Connecting to %s", log_strdup(host));
@@ -357,6 +403,7 @@ static int reconnect(struct download_client *dl)
 void download_thread(void *client, void *a, void *b)
 {
 	int rc = 0;
+	int error_cause;
 	size_t len;
 	struct download_client *const dl = client;
 
@@ -395,10 +442,17 @@ restart_and_suspend:
 				}
 			}
 
+			error_cause = ECONNRESET;
+
 			if (len == -1) {
-				if (errno == ETIMEDOUT) {
-					LOG_DBG("Socket timeout, resending");
-					goto send_again;
+				if ((errno == ETIMEDOUT) || (errno == EWOULDBLOCK) ||
+				    (errno == EAGAIN)) {
+					if (dl->proto == IPPROTO_UDP ||
+					    dl->proto == IPPROTO_DTLS_1_2) {
+						LOG_DBG("Socket timeout, resending");
+						goto send_again;
+					}
+					error_cause = ETIMEDOUT;
 				}
 				LOG_ERR("Error in recv(), errno %d", errno);
 			}
@@ -411,7 +465,7 @@ restart_and_suspend:
 			 * Attempt to reconnect and resume the download
 			 * if the application returns Zero via the event.
 			 */
-			rc = error_evt_send(dl, ECONNRESET);
+			rc = error_evt_send(dl, error_cause);
 			if (rc) {
 				/* Restart and suspend */
 				break;
@@ -483,7 +537,8 @@ restart_and_suspend:
 send_again:
 		dl->offset = 0;
 		/* Request next fragment, if necessary (HTTPS/CoAP) */
-		if (dl->proto != IPPROTO_TCP || len == 0) {
+		if (dl->proto != IPPROTO_TCP || len == 0
+		   || IS_ENABLED(CONFIG_DOWNLOAD_CLIENT_RANGE_REQUESTS)) {
 			dl->http.has_header = false;
 
 			rc = request_send(dl);
@@ -528,6 +583,8 @@ int download_client_init(struct download_client *const client,
 				download_thread, client, NULL, NULL,
 				K_LOWEST_APPLICATION_THREAD_PRIO, 0, K_NO_WAIT);
 
+	k_thread_name_set(client->tid, "download_client");
+
 	return 0;
 }
 
@@ -568,12 +625,6 @@ int download_client_connect(struct download_client *client, const char *host,
 
 	err = client_connect(client, host, &sa, &client->fd);
 	if (client->fd < 0) {
-		return err;
-	}
-
-	/* Set socket timeout, if configured */
-	err = socket_timeout_set(client->fd);
-	if (err) {
 		return err;
 	}
 
@@ -619,8 +670,10 @@ int download_client_start(struct download_client *client, const char *file,
 	client->offset = 0;
 	client->http.has_header = false;
 
-	if (IS_ENABLED(CONFIG_COAP)) {
-		coap_block_init(client, from);
+	if (client->proto == IPPROTO_UDP || client->proto == IPPROTO_DTLS_1_2) {
+		if (IS_ENABLED(CONFIG_COAP)) {
+			coap_block_init(client, from);
+		}
 	}
 
 	err = request_send(client);

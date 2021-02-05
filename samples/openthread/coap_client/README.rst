@@ -3,13 +3,16 @@
 Thread: CoAP Client
 ###################
 
-The Thread CoAP Client sample demonstrates controlling light resources of other nodes within an OpenThread network.
+.. contents::
+   :local:
+   :depth: 2
+
+The :ref:`Thread <ug_thread>` CoAP Client sample demonstrates controlling light resources of other nodes within an OpenThread network.
 To show this interaction, the sample requires a server sample that is compatible with the OpenThread network and has a light resource available.
 The recommended server sample referenced on this page is :ref:`coap_server_sample`.
 
-.. note::
-    This sample supports optional :ref:`coap_client_sample_multi_ext` and Minimal Thread Device variants.
-    See :ref:`coap_client_sample_activating_variants` for details.
+This sample supports optional :ref:`coap_client_sample_multi_ext` and :ref:`Minimal Thread Device variant <thread_ug_device_type>`, which can be turned on or off.
+See :ref:`coap_client_sample_activating_variants` for details.
 
 Overview
 ********
@@ -28,12 +31,19 @@ For example usage of the native Thread CoAP API, see the :ref:`coap_server_sampl
 
 .. _coap_client_sample_multi_ext:
 
-Multiprotocol |BLE| extension
-=============================
+Multiprotocol Bluetooth LE extension
+====================================
 
 This optional extension can demonstrate the OpenThread stack and :ref:`nrfxlib:softdevice_controller` working concurrently.
-It uses the :ref:`nus_service_readme` library to control the LED states over |BLE| in a Thread network.
-For more information about multiprotocol feature, see :ref:`ug_multiprotocol_support`.
+It uses the :ref:`nus_service_readme` library to control the LED states over Bluetooth LE in a Thread network.
+For more information about the multiprotocol feature, see :ref:`ug_multiprotocol_support`.
+
+FEM support
+===========
+
+.. |fem_file_path| replace:: :file:`samples/openthread/common`
+
+.. include:: /includes/sample_fem_support.txt
 
 Requirements
 ************
@@ -42,7 +52,10 @@ The sample supports the following development kits:
 
 .. table-from-rows:: /includes/sample_board_rows.txt
    :header: heading
-   :rows: nrf52840dk_nrf52840, nrf52833dk_nrf52833
+   :rows: nrf5340dk_nrf5340_cpuapp, nrf52840dk_nrf52840, nrf52833dk_nrf52833, nrf21540dk_nrf52840
+
+.. note::
+   The multiprotocol variant is not supported on nRF53 Series devices yet.
 
 You can use one or more of the development kits listed above as the Thread CoAP Client.
 You also need one or more compatible development kits programmed with the :ref:`coap_server_sample` sample.
@@ -90,11 +103,11 @@ Button 3:
 
 For more information, see :ref:`thread_ug_device_type` in the Thread user guide.
 
-Multiprotocol |BLE| extension assignments
-=========================================
+Multiprotocol Bluetooth LE extension assignments
+================================================
 
 LED 2:
-   On when |BLE| connection is established.
+   On when Bluetooth LE connection is established.
 
 UART command assignments:
    The following command assignments are configured and used in nRF Toolbox when :ref:`coap_client_sample_testing_ble`:
@@ -120,9 +133,10 @@ Activating sample extensions
 To activate the optional extensions supported by this sample, modify :makevar:`OVERLAY_CONFIG` in the following manner:
 
 * For the Minimal Thread Device variant, set :file:`overlay-mtd.conf`.
-* For the Multiprotocol BLE extension, set :file:`overlay-multiprotocol_ble.conf`.
+* For the Multiprotocol Bluetooth LE extension, set :file:`overlay-multiprotocol_ble.conf`.
 
 See :ref:`cmake_options` for instructions on how to add this option.
+For more information about using configuration overlay files, see :ref:`zephyr:important-build-vars` in the Zephyr documentation.
 
 Testing
 =======
@@ -150,23 +164,23 @@ After building the sample and programming it to your development kit, test it by
 Testing Minimal Thread Device
 -----------------------------
 
-After building the MTD variant of this sample and programming it, the device starts in the MED mode with **LED 3** on.
-This means that the radio is enabled when idle and the serial console is operating.
-You can switch to the SED mode at any moment during the standard testing procedure.
+After building the MTD variant of this sample and programming it, the device starts in the SED mode with **LED 3** off.
+This means that the radio is disabled when idle and the serial console is not working to decrease the power consumption.
+You can switch to the MED mode at any moment during the standard testing procedure.
 
-To toggle SED, press **Button 3** on the client node.
-**LED 3** turns off to indicate the switch to the SED mode.
-At this point, the radio is disabled when it is idle and the serial console is not working to decrease the power consumption.
+To toggle MED, press **Button 3** on the client node.
+**LED 3** turns on to indicate the switch to the MED mode.
+At this point, the radio is enabled when it is idle and the serial console is operating.
 
-Pressing **Button 3** again will switch the mode back to MED.
+Pressing **Button 3** again will switch the mode back to SED.
 Switching between SED and MED modes does not affect the standard testing procedure, but terminal logs are not available in the SED mode.
 
 .. _coap_client_sample_testing_ble:
 
-Testing multiprotocol |BLE| extension
--------------------------------------
+Testing multiprotocol Bluetooth LE extension
+--------------------------------------------
 
-To test the multiprotocol |BLE| extension, complete the following steps after the standard `Testing`_ procedure:
+To test the multiprotocol Bluetooth LE extension, complete the following steps after the standard `Testing`_ procedure:
 
 #. Set up nRF Toolbox by completing the following steps:
 
@@ -230,9 +244,6 @@ Sample output
 The sample logging output can be observed through a serial port.
 For more details, see :ref:`putty`.
 
-.. note::
-     |thread_hwfc_enabled|
-
 Dependencies
 ************
 
@@ -255,7 +266,7 @@ In addition, it uses the following Zephyr libraries:
 
   * ``include/kernel.h``
 
-The following dependencies are added by the optional multiprotocol |BLE| extension:
+The following dependencies are added by the optional multiprotocol Bluetooth LE extension:
 
 * :ref:`nrfxlib:softdevice_controller`
 * :ref:`nus_service_readme`

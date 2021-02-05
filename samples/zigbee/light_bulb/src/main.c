@@ -20,8 +20,8 @@
 #include <zboss_api.h>
 #include <zboss_api_addons.h>
 #include <zb_mem_config_med.h>
-#include <zigbee_helpers.h>
-#include <zb_error_handler.h>
+#include <zigbee/zigbee_app_utils.h>
+#include <zigbee/zigbee_error_handler.h>
 #include <zb_nrf_platform.h>
 
 #define RUN_STATUS_LED                  DK_LED1
@@ -122,7 +122,7 @@ typedef struct {
 static bulb_device_ctx_t dev_ctx;
 
 /* Pointer to PWM device controlling leds with pwm signal. */
-static struct device *led_pwm_dev;
+static const struct device *led_pwm_dev;
 
 ZB_ZCL_DECLARE_IDENTIFY_ATTRIB_LIST(
 	identify_attr_list,
