@@ -213,11 +213,26 @@ Trusted Firmware-M:
 
 * Added a simple sample that demonstrates how to integrate TF-M in an application.
 
+Partition Manager:
+------------------
+
+* Changed naming convention for partition names in ``pm.yml`` and ``pm_static.yml``.
+* Updated Partition Manager to prevent users from using partition names in ``pm.yml`` and ``pm_static.yml`` that match the names of the child images that define them in ``CMakeLists.txt``:
+
+  * If the invalid naming scheme is used in ``pm.yml`` files, Partition Manager will now fail the builds.
+  * If the invalid naming scheme is used in ``pm_static.yml`` files, the build will instead print a warning prompting the user to change this, if possible.
+* Renamed ``b0`` and ``b0n`` container partitions to ``b0_provision`` and ``b0n_provision``, respectively.
+* Renamed ``b0_image`` and ``b0n_image`` image partitions to appropriately match their child image name, ``b0`` and ``b0n``, respectively.
+
+  **Migration notes:** While in development, you should rename partitions appropriately.
+  You can still build firmware updates under the invalid scheme, but they will still be built with the improper sizes for the related partitions.
 
 MCUboot
 =======
 
-The MCUboot fork in |NCS| (``sdk-mcuboot``) contains all commits from the upstream MCUboot repository up to and including ``c74c551ed6``, plus some |NCS| specific additions.
+The MCUboot fork in |NCS| (``sdk-mcuboot``) contains all commits from the upstream MCUboot repository up to and including ``3f49b5abf3``, plus some |NCS| specific additions.
+
+The code for integrating MCUboot into |NCS| is located in :file:`ncs/nrf/modules/mcuboot`.
 
 The following list summarizes the most important changes inherited from upstream MCUboot:
 
@@ -251,7 +266,7 @@ The following list summarizes the most important changes inherited from upstream
 Mcumgr
 ======
 
-The mcumgr library fork in |NCS| (``sdk-mcumgr``) contains all commits from the upstream mcumgr repository up to and including snapshot ``449bee75750e``.
+The mcumgr library contains all commits from the upstream mcumgr repository up to and including snapshot ``74e77ad08``.
 
 The following list summarizes the most important changes inherited from upstream mcumgr:
 
@@ -265,19 +280,19 @@ Zephyr
 
 .. NOTE TO MAINTAINERS: The latest Zephyr commit appears in multiple places; make sure you update them all.
 
-The Zephyr fork in |NCS| (``sdk-zephyr``) contains all commits from the upstream Zephyr repository up to and including ``856fd652dab9``, plus some |NCS| specific additions.
+The Zephyr fork in |NCS| (``sdk-zephyr``) contains all commits from the upstream Zephyr repository up to and including ``ff720cd9b343``, plus some |NCS| specific additions.
 
 For a complete list of upstream Zephyr commits incorporated into |NCS| since the most recent release, run the following command from the :file:`ncs/zephyr` repository (after running ``west update``):
 
 .. code-block:: none
 
-   git log --oneline 856fd652dab9 ^v2.4.0-ncs1
+   git log --oneline ff720cd9b343 ^v2.4.0-ncs1
 
 For a complete list of |NCS| specific commits, run:
 
 .. code-block:: none
 
-   git log --oneline manifest-rev ^856fd652dab9
+   git log --oneline manifest-rev ^ff720cd9b343
 
 The current |NCS| release is based on Zephyr v2.4.99.
 
