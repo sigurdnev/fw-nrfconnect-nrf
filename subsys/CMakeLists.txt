@@ -17,6 +17,7 @@ add_subdirectory_ifdef(CONFIG_SECURE_BOOT_STORAGE bootloader/bl_storage)
 add_subdirectory(net)
 add_subdirectory_ifdef(CONFIG_ESB		esb)
 add_subdirectory_ifdef(CONFIG_EVENT_MANAGER	event_manager)
+add_subdirectory_ifdef(CONFIG_CAF		caf)
 add_subdirectory_ifdef(CONFIG_PROFILER		profiler)
 add_subdirectory(dfu)
 add_subdirectory_ifdef(CONFIG_PCD 		pcd)
@@ -24,6 +25,7 @@ add_subdirectory_ifdef(CONFIG_IS_SPM		spm)
 add_subdirectory_ifdef(CONFIG_TRUSTED_EXECUTION_NONSECURE nonsecure)
 add_subdirectory_ifdef(CONFIG_MPSL mpsl)
 add_subdirectory_ifdef(CONFIG_ZIGBEE zigbee)
+add_subdirectory_ifdef(CONFIG_MGMT_FMFU mgmt/fmfu)
 
 if (CONFIG_NFC_T2T_NRFXLIB OR
     CONFIG_NFC_T4T_NRFXLIB OR

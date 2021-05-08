@@ -24,7 +24,7 @@ Overview: Firmware architecture
 
 The nRF Desktop application design aims at high performance, while still providing configurability and extensibility.
 
-The application architecture is modular and event-driven.
+The application architecture is modular, event-driven and build around :ref:`lib_caf`.
 This means that parts of the application functionality are separated into isolated modules that communicate with each other using application events, which are handled by the :ref:`event_manager`.
 Modules register themselves as listeners of those events that they are configured to react to.
 An application event can be submitted by multiple modules and it can have multiple listeners.
@@ -188,7 +188,7 @@ The nRF Desktop mouse sends HID input reports to host after the host connects an
 
 The :ref:`nrf_desktop_motion` sensor sampling is synchronized with sending the HID mouse input reports to the host.
 
-The :ref:`nrf_desktop_wheel` and :ref:`nrf_desktop_buttons` provide data to the :ref:`nrf_desktop_hid_state` when the mouse wheel is used or a button is pressed, respectively.
+The :ref:`nrf_desktop_wheel` and :ref:`caf_buttons` provide data to the :ref:`nrf_desktop_hid_state` when the mouse wheel is used or a button is pressed, respectively.
 These inputs are not synchronized with the HID report transmission to the host.
 
 When the mouse is constantly in use, the motion module is kept in the fetching state.
@@ -307,10 +307,10 @@ The following build types are available for various boards in nRF Desktop:
 
 * ``ZRelease`` -- Release version of the application with no debugging features.
 * ``ZReleaseB0`` -- ``ZRelease`` build type with the support for the B0 bootloader enabled (for :ref:`background DFU <nrf_desktop_bootloader_background_dfu>`).
-* ``ZReleaseMCUBoot`` -- ``ZRelease`` build type with the support for the MCUBoot bootloader enabled (for :ref:`serial recovery DFU <nrf_desktop_bootloader_serial_dfu>` or :ref:`background DFU <nrf_desktop_bootloader_background_dfu>`).
+* ``ZReleaseMCUBoot`` -- ``ZRelease`` build type with the support for the MCUboot bootloader enabled (for :ref:`serial recovery DFU <nrf_desktop_bootloader_serial_dfu>` or :ref:`background DFU <nrf_desktop_bootloader_background_dfu>`).
 * ``ZDebug`` -- Debug version of the application; the same as the ``ZRelease`` build type, but with debug options enabled.
 * ``ZDebugB0`` -- ``ZDebug`` build type with the support for the B0 bootloader enabled (for :ref:`background DFU <nrf_desktop_bootloader_background_dfu>`).
-* ``ZDebugMCUBoot`` -- ``ZDebug`` build type with the support for the MCUBoot bootloader enabled (for :ref:`serial recovery DFU <nrf_desktop_bootloader_serial_dfu>` or :ref:`background DFU <nrf_desktop_bootloader_background_dfu>`).
+* ``ZDebugMCUBoot`` -- ``ZDebug`` build type with the support for the MCUboot bootloader enabled (for :ref:`serial recovery DFU <nrf_desktop_bootloader_serial_dfu>` or :ref:`background DFU <nrf_desktop_bootloader_background_dfu>`).
 * ``ZDebugWithShell`` -- ``ZDebug`` build type with the shell enabled.
 
 In nRF Desktop, not every development kit can support every build type mentioned above.
@@ -704,7 +704,7 @@ You can define the amount of time after which the peripherals are suspended or p
 By default, this period is set to 120 seconds.
 
 .. important::
-    When the gaming mouse is powered from USB, the power down time-out functionality is disabled.
+    When the gaming mouse is powered from USB, the power down timeout functionality is disabled.
 
     If a nRF Desktop device supports remote wakeup, the USB connected device goes to suspended state when USB is suspended.
     The device can then trigger remote wakeup of the connected host on user input.
@@ -765,7 +765,7 @@ After building the application with or without :ref:`specifying the build type <
 
    .. note::
         You can manually start the scanning for new peripheral devices by pressing the **SW1** button on the dongle for a short time.
-        This might be needed if the dongle does not connect with all the peripherals before time-out.
+        This might be needed if the dongle does not connect with all the peripherals before timeout.
         The scanning is interrupted after the amount of time predefined in :option:`CONFIG_DESKTOP_BLE_SCAN_DURATION_S`, because it negatively affects the performance of already connected peripherals.
 
 #. Move the mouse and press any key on the keyboard.
@@ -923,11 +923,11 @@ To use the nRF Desktop application with your custom board:
    In such case, the overlay file can be left empty.
 #. In Kconfig, ensure that the following modules that are specific for gaming mouse are enabled:
 
+   * :ref:`caf_buttons`
+   * :ref:`caf_leds`
    * :ref:`nrf_desktop_motion`
    * :ref:`nrf_desktop_wheel`
-   * :ref:`nrf_desktop_buttons`
    * :ref:`nrf_desktop_battery_meas`
-   * :ref:`nrf_desktop_leds`
 
 #. For each module enabled, change its :file:`_def` file to match your hardware.
    Apply the following changes, depending on the module:
@@ -1275,15 +1275,15 @@ The nRF Desktop devices use one of the following Link Layers:
 
 * :option:`CONFIG_BT_LL_SOFTDEVICE`
     This Link Layer does support the Low Latency Packet Mode (LLPM).
-    If you opt for this Link Layer and enable this option, the :option:`CONFIG_DESKTOP_BLE_USE_LLPM` is also enabled by default and can be configured further:
+    If you opt for this Link Layer and enable the :option:`CONFIG_BT_CTLR_LLPM`, the :option:`CONFIG_CAF_BLE_USE_LLPM` is also enabled by default and can be configured further:
 
-    * When :option:`CONFIG_DESKTOP_BLE_USE_LLPM` is enabled, set the value for :option:`CONFIG_SDC_MAX_CONN_EVENT_LEN_DEFAULT` to ``3000``.
+    * When :option:`CONFIG_CAF_BLE_USE_LLPM` is enabled, set the value for :option:`CONFIG_SDC_MAX_CONN_EVENT_LEN_DEFAULT` to ``3000``.
 
       This is required by the nRF Desktop central and helps avoid scheduling conflicts with Bluetooth Link Layer.
       Such conflicts could lead to a drop in HID input report rate or a disconnection.
       Setting the value to ``3000`` also enables the nRF Desktop central to exchange data with up to 2 standard Bluetooth LE peripherals during every connection interval (every 7.5 ms).
 
-    * When :option:`CONFIG_DESKTOP_BLE_USE_LLPM` is disabled, the device will use only standard Bluetooth LE connection parameters with the lowest available connection interval of 7.5 ms.
+    * When :option:`CONFIG_CAF_BLE_USE_LLPM` is disabled, the device will use only standard Bluetooth LE connection parameters with the lowest available connection interval of 7.5 ms.
 
       If the LLPM is disabled and more than 2 simultaneous Bluetooth connections are supported (:option:`CONFIG_BT_MAX_CONN`), you can set the value for :option:`CONFIG_SDC_MAX_CONN_EVENT_LEN_DEFAULT` to ``2500``.
       With this value, the nRF Desktop central is able to exchange the data with up to 3 Bluetooth LE peripherals during every 7.5-ms connection interval.
@@ -1380,8 +1380,8 @@ The nRF Desktop application can use one of the following bootloaders:
     Because of this, the image is not booted directly from the secondary image slot.
     The swap operation takes additional time, but an external FLASH can be used as the secondary image slot.
 
-    You can use the MCUBoot for the background DFU through the :ref:`nrf_desktop_config_channel` and :ref:`nrf_desktop_dfu`.
-    The MCUBoot can also be used for the background DFU over Simple Management Protocol (SMP).
+    You can use the MCUboot for the background DFU through the :ref:`nrf_desktop_config_channel` and :ref:`nrf_desktop_dfu`.
+    The MCUboot can also be used for the background DFU over Simple Management Protocol (SMP).
     The SMP can be used to transfer the new firmware image in the background from an Android device.
     In that case, the :ref:`nrf_desktop_smp` is used to handle the image transfer.
 
@@ -1411,7 +1411,7 @@ The B0 bootloader requires the following options enabled:
 * :option:`CONFIG_FW_INFO_FIRMWARE_VERSION` - Enable this option to set the version of the application after you enabled :option:`CONFIG_FW_INFO`.
 * :option:`CONFIG_BUILD_S1_VARIANT` - Required for the build system to be able to construct the application binaries for both application's slots in flash memory.
 
-Configuring the MCUBoot bootloader
+Configuring the MCUboot bootloader
 ----------------------------------
 
 To enable the MCUboot bootloader, select the :option:`CONFIG_BOOTLOADER_MCUBOOT` Kconfig option.
@@ -1419,7 +1419,7 @@ To enable the MCUboot bootloader, select the :option:`CONFIG_BOOTLOADER_MCUBOOT`
 Configure the MCUboot bootloader with the following options:
 
 * ``CONFIG_BOOT_SIGNATURE_KEY_FILE`` - This option defines the path to the private key that is used to sign the application and that is used by the bootloader to verify the application signature.
-  The key must be defined only in the MCUBoot bootloader configuration file.
+  The key must be defined only in the MCUboot bootloader configuration file.
 * :option:`CONFIG_IMG_MANAGER` and :option:`CONFIG_MCUBOOT_IMG_MANAGER` - These options allow the application to manage the DFU image.
   Enable both of them only for configurations that support :ref:`background DFU <nrf_desktop_bootloader_background_dfu>`.
   For these configurations, the :ref:`nrf_desktop_dfu` uses the provided API to request firmware upgrade and confirm the running image.
@@ -1436,7 +1436,7 @@ At the end of these three stages, the nRF Desktop application will be rebooted w
 .. note::
     The background DFU mode requires two application slots in the flash memory.
     For this reason, the feature is not available for devices with smaller flash size, because the size of the flash memory required is essentially doubled.
-    The devices with smaller flash size can use either :ref:`nrf_desktop_bootloader_serial_dfu` or MCUBoot bootloader with the secondary image partition located on an external flash.
+    The devices with smaller flash size can use either :ref:`nrf_desktop_bootloader_serial_dfu` or MCUboot bootloader with the secondary image partition located on an external flash.
 
 The background firmware upgrade can also be performed over the Simple Management Protocol (SMP).
 For more detailed information about the DFU over SMP, read the :ref:`nrf_desktop_smp` documentation.
@@ -1511,10 +1511,10 @@ Configuring serial recovery DFU
 -------------------------------
 
 Configure :ref:`MCUboot <mcuboot:mcuboot_wrapper>` to enable the serial recovery DFU through USB.
-The MCUBoot configuration for a given board and :ref:`build type <nrf_desktop_requirements_build_types>` should be written to :file:`applications/nrf_desktop/configuration/your_board_name/mcuboot_buildtype.conf`.
+The MCUboot configuration for a given board and :ref:`build type <nrf_desktop_requirements_build_types>` should be written to :file:`applications/nrf_desktop/configuration/your_board_name/mcuboot_buildtype.conf`.
 For an example of the configuration, see the ``ZReleaseMCUBoot`` build type of the nRF52820 or the nRF52833 dongle.
 
-Not every configuration with MCUBoot in the nRF Desktop supports the USB serial recovery.
+Not every configuration with MCUboot in the nRF Desktop supports the USB serial recovery.
 For example, the ``ZDebugMCUBootSMP`` configuration for the nRF52840 Development Kit supports the MCUboot bootloader with background firmware upgrade.
 
 Select the following Kconfig options to enable the serial recovery DFU:
@@ -1548,6 +1548,7 @@ Dependencies
 
 This application uses the following |NCS| libraries and drivers:
 
+* :ref:`lib_caf`
 * :ref:`event_manager`
 * :ref:`profiler`
 * :ref:`hids_readme`
@@ -1582,6 +1583,7 @@ These are valid for events that have many listeners or sources, and are gathered
    doc/ble_conn_params.rst
    doc/ble_discovery.rst
    doc/ble_latency.rst
+   doc/ble_passkey.rst
    doc/ble_qos.rst
    doc/ble_scan.rst
    doc/ble_state.rst

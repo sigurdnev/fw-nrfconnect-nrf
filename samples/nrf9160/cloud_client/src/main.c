@@ -125,7 +125,8 @@ void cloud_event_handler(const struct cloud_backend *const backend,
 		break;
 	case CLOUD_EVT_DATA_RECEIVED:
 		LOG_INF("CLOUD_EVT_DATA_RECEIVED");
-		LOG_INF("Data received from cloud: %s",
+		LOG_INF("Data received from cloud: %.*s",
+			evt->data.msg.len,
 			log_strdup(evt->data.msg.buf));
 		break;
 	case CLOUD_EVT_PAIR_REQUEST:
@@ -136,6 +137,9 @@ void cloud_event_handler(const struct cloud_backend *const backend,
 		break;
 	case CLOUD_EVT_FOTA_DONE:
 		LOG_INF("CLOUD_EVT_FOTA_DONE");
+		break;
+	case CLOUD_EVT_FOTA_ERROR:
+		LOG_INF("CLOUD_EVT_FOTA_ERROR");
 		break;
 	default:
 		LOG_INF("Unknown cloud event type: %d", evt->type);
@@ -187,6 +191,13 @@ static void lte_handler(const struct lte_lc_evt *const evt)
 	case LTE_LC_EVT_CELL_UPDATE:
 		LOG_DBG("LTE cell changed: Cell ID: %d, Tracking area: %d",
 			evt->cell.id, evt->cell.tac);
+		break;
+	case LTE_LC_EVT_LTE_MODE_UPDATE:
+		LOG_INF("Active LTE mode changed: %s",
+			evt->lte_mode == LTE_LC_LTE_MODE_NONE ? "None" :
+			evt->lte_mode == LTE_LC_LTE_MODE_LTEM ? "LTE-M" :
+			evt->lte_mode == LTE_LC_LTE_MODE_NBIOT ? "NB-IoT" :
+			"Unknown");
 		break;
 	default:
 		break;

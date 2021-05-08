@@ -20,6 +20,14 @@
 #include <dfu/dfu_target_mcuboot.h>
 #endif
 
+/* If bootloader upgrades are supported we need room for two file strings. */
+#ifdef PM_S1_ADDRESS
+/* One file string for each of s0 and s1, and a space separator */
+#define FILE_BUF_LEN ((CONFIG_DOWNLOAD_CLIENT_MAX_FILENAME_SIZE*2)+1)
+#else
+#define FILE_BUF_LEN (CONFIG_DOWNLOAD_CLIENT_MAX_FILENAME_SIZE)
+#endif
+
 LOG_MODULE_REGISTER(fota_download, CONFIG_FOTA_DOWNLOAD_LOG_LEVEL);
 
 static fota_download_callback_t callback;
@@ -29,6 +37,9 @@ static int socket_retries_left;
 #ifdef CONFIG_DFU_TARGET_MCUBOOT
 static uint8_t mcuboot_buf[CONFIG_FOTA_DOWNLOAD_MCUBOOT_FLASH_BUF_SZ];
 #endif
+static enum dfu_target_image_type img_type;
+static bool first_fragment;
+
 static void send_evt(enum fota_download_evt_id id)
 {
 	__ASSERT(id != FOTA_DOWNLOAD_EVT_PROGRESS, "use send_progress");
@@ -74,7 +85,6 @@ static void dfu_target_callback_handler(enum dfu_target_evt_id evt)
 
 static int download_client_callback(const struct download_client_evt *event)
 {
-	static bool first_fragment = true;
 	static size_t file_size;
 	size_t offset;
 	int err;
@@ -94,12 +104,13 @@ static int download_client_callback(const struct download_client_evt *event)
 				return err;
 			}
 			first_fragment = false;
-			int img_type = dfu_target_img_type(event->fragment.buf,
+			img_type = dfu_target_img_type(event->fragment.buf,
 							event->fragment.len);
 			err = dfu_target_init(img_type, file_size,
 					      dfu_target_callback_handler);
 			if ((err < 0) && (err != -EBUSY)) {
 				LOG_ERR("dfu_target_init error %d", err);
+				(void)download_client_disconnect(&dlc);
 				send_error_evt(FOTA_DOWNLOAD_ERROR_CAUSE_DOWNLOAD_FAILED);
 				int res = dfu_target_reset();
 
@@ -247,6 +258,13 @@ static void download_with_offset(struct k_work *unused)
 int fota_download_start(const char *host, const char *file, int sec_tag,
 			const char *apn, size_t fragment_size)
 {
+	/* We need a static file buffer since the download client structure
+	 * only keeps a pointer to the file buffer. This is problematic when
+	 * a download needs to be restarted for some reason (e.g. if
+	 * continuing a download operation from an offset).
+	 */
+	static char file_buf[FILE_BUF_LEN];
+	const char *file_buf_ptr = file_buf;
 	int err = -1;
 
 	struct download_client_cfg config = {
@@ -262,6 +280,8 @@ int fota_download_start(const char *host, const char *file, int sec_tag,
 
 	socket_retries_left = CONFIG_FOTA_SOCKET_RETRIES;
 
+	strncpy(file_buf, file, sizeof(file_buf));
+
 #ifdef PM_S1_ADDRESS
 	/* B1 upgrade is supported, check what B1 slot is active,
 	 * (s0 or s1), and update file to point to correct candidate if
@@ -276,29 +296,33 @@ int fota_download_start(const char *host, const char *file, int sec_tag,
 		return err;
 	}
 #else /* CONFIG_TRUSTED_EXECUTION_NONSECURE */
-	const struct fw_info *tmp_info;
+	const struct fw_info *s0;
+	const struct fw_info *s1;
 
-	tmp_info = fw_info_find(PM_S0_ADDRESS);
-	if (tmp_info == NULL) {
+	s0 = fw_info_find(PM_S0_ADDRESS);
+	if (s0 == NULL) {
 		return -EFAULT;
 	}
-	memcpy(&s0, tmp_info, sizeof(s0));
 
-	tmp_info = fw_info_find(PM_S1_ADDRESS);
-	if (tmp_info == NULL) {
-		return -EFAULT;
+	s1 = fw_info_find(PM_S1_ADDRESS);
+	if (s1 == NULL) {
+		/* No s1 found, s0 is active */
+		s0_active = true;
+	} else {
+		/* Both s0 and s1 found, check who is active */
+		s0_active = s0->version >= s1->version;
 	}
-	memcpy(&s1, tmp_info, sizeof(s1));
+
 #endif /* CONFIG_TRUSTED_EXECUTION_NONSECURE */
 
-	err = dfu_ctx_mcuboot_set_b1_file(file, s0_active, &update);
+	err = dfu_ctx_mcuboot_set_b1_file(file_buf, s0_active, &update);
 	if (err != 0) {
 		return err;
 	}
 
 	if (update != NULL) {
-		LOG_INF("B1 update, selected file:\n%s", update);
-		file = update;
+		LOG_INF("B1 update, selected file:\n%s", log_strdup(update));
+		file_buf_ptr = update;
 	}
 #endif /* PM_S1_ADDRESS */
 
@@ -307,7 +331,7 @@ int fota_download_start(const char *host, const char *file, int sec_tag,
 		return err;
 	}
 
-	err = download_client_start(&dlc, file, 0);
+	err = download_client_start(&dlc, file_buf_ptr, 0);
 	if (err != 0) {
 		download_client_disconnect(&dlc);
 		return err;
@@ -343,5 +367,38 @@ int fota_download_init(fota_download_callback_t client_callback)
 		return err;
 	}
 
+	first_fragment = true;
 	return 0;
+}
+
+int fota_download_cancel(void)
+{
+	int err;
+
+	if (dlc.fd == -1) {
+		/* Download not started, aborted or completed */
+		LOG_WRN("%s invalid state", __func__);
+		return -EAGAIN;
+	}
+
+	err = download_client_disconnect(&dlc);
+	if (err) {
+		LOG_ERR("%s failed to disconnect: %d", __func__, err);
+		return err;
+	}
+
+	err = dfu_target_done(false);
+	if (err && err != -EACCES) {
+		LOG_ERR("%s failed to clean up: %d", __func__, err);
+	} else {
+		first_fragment = true;
+		send_evt(FOTA_DOWNLOAD_EVT_CANCELLED);
+	}
+
+	return err;
+}
+
+int fota_download_target(void)
+{
+	return img_type;
 }

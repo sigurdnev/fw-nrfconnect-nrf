@@ -18,6 +18,15 @@ In addition, the |NCS| provides the following samples that showcase the use of a
    ../../samples/bluetooth/*/README
    ../../samples/bluetooth/mesh/*/README
 
+.. _edge_impulse_samples:
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Edge Impulse samples
+   :glob:
+
+   ../../samples/edge_impulse/*/README
+
 .. _nfc_samples:
 
 .. toctree::
@@ -51,7 +60,7 @@ In addition, the |NCS| provides the following samples that showcase the use of a
 
 .. toctree::
    :maxdepth: 1
-   :caption: CHIP samples
+   :caption: Project CHIP samples
    :glob:
 
    ../../samples/connectedhomeip/*/README
@@ -73,6 +82,8 @@ In addition, the |NCS| provides the following samples that showcase the use of a
    :glob:
 
    ../../samples/zigbee/*/README
+
+.. _other_samples:
 
 .. toctree::
    :maxdepth: 1

@@ -19,6 +19,20 @@ if (CONFIG_SPM)
 
   set(spm_CONFIG_SPM_SECURE_SERVICES ${CONFIG_SPM_SECURE_SERVICES})
 
+  if (CONFIG_SPM_SERVICE_NS_HANDLER_FROM_SPM_FAULT)
+      add_overlay_config(
+        spm
+        ${NRF_DIR}/samples/spm/spm_ns_handler_from_spm_fault.conf
+        )
+  endif()
+
+  if (CONFIG_BOARD_ENABLE_CPUNET)
+      add_overlay_config(
+        spm
+        ${NRF_DIR}/samples/spm/spm_enable_cpunet.conf
+        )
+  endif()
+
   add_child_image(
     NAME spm
     SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/spm
@@ -33,6 +47,15 @@ if (CONFIG_SPM)
       points to the .a file (default 'spm/libspmsecureentries.a')
       generated alongside the flashed or merged SPM hex file")
   endif()
+endif()
+
+if (CONFIG_BUILD_WITH_TFM AND CONFIG_UART_1_NRF_UARTE)
+  message(FATAL_ERROR "
+    Non-secure applications built with TF-M cannot use UART1, because this
+    instance is used by the TF-M secure application. Disable the uart1 node
+    in devicetree. See the following file:
+    nrf/samples/tfm/tfm_hello_world/boards/nrf9160dk_nrf9160ns.overlay
+    for an example how to do it.")
 endif()
 
 if (CONFIG_SECURE_BOOT)

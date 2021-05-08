@@ -7,6 +7,9 @@ Bluetooth: Throughput
    :local:
    :depth: 2
 
+.. note::
+   The implementation and usage of this sample has changed considerably with |NCS| v1.5.0.
+
 The Bluetooth Throughput sample uses the :ref:`throughput_readme` to measure *Bluetooth* Low Energy throughput performance.
 You can use it to determine the maximum throughput, or to experiment with different connection parameters and check their influence on the throughput.
 
@@ -14,15 +17,18 @@ Overview
 ********
 
 The sample transmits data between two development kits, the *tester* and the *peer*, and measures the throughput performance.
-To do so, it uses the :ref:`throughput_readme`.
+It uses the :ref:`throughput_readme` for this.
 To run the tests, connect to the kit using the serial port and send shell commands.
-Zephyr's :ref:`zephyr:shell_api` module is used to handle the commands
+Zephyr's :ref:`zephyr:shell_api` module is used to handle the commands.
 
 The sample demonstrates the interaction of the following connection parameters:
 
 ATT_MTU size
    In *Bluetooth* Low Energy, the default Maximum Transmission Unit (MTU) is 23 bytes.
    When increasing this value, longer ATT payloads can be achieved, increasing ATT throughput.
+
+.. note::
+   To configure the ATT_MTU size, use menuconfig and compile and program the sample again.
 
 Data length
    In *Bluetooth* Low Energy, the default data length for a radio packet is 27 bytes.
@@ -59,6 +65,7 @@ Changing connection parameter values
 To experiment with different connection parameter values, reconfigure the values using the :ref:`zephyr:shell_api` interface before running a test.
 
 You can adjust the following parameters:
+
 * PHY
 * LE Data Length
 * LE Connection interval
@@ -119,7 +126,9 @@ After programming the sample to both kits, test it by performing the following s
 #. Observe that the kits establish a connection.
    The tester outputs the following information::
 
-       Ready, press any key to start
+      Type 'config' to change the configuration parameters.
+      You can use the Tab key to autocomplete your input.
+      Type 'run' when you are ready to run the test.
 
 #. Type ``config print`` in the terminal to print the current configuration.
    Type ``config`` in the terminal to configure the test parameters to your choice.

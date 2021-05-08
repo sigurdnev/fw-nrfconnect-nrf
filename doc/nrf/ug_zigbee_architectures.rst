@@ -41,14 +41,19 @@ The application uses the :ref:`nrfxlib:zboss` APIs directly.
 This is the design most commonly used for End Devices and Routers.
 
 .. figure:: /images/zigbee_platform_design_soc.svg
-   :alt: Zigbee-only architecture
+   :alt: Zigbee-only architecture (nRF52 Series devices)
 
-   Zigbee-only architecture
+   Zigbee-only architecture on nRF52 Series devices
+
+.. figure:: /images/zigbee_platform_design_nRF53.svg
+   :alt: Zigbee-only architecture (nRF53 Series devices)
+
+   Zigbee-only architecture on nRF53 Series devices
 
 Single-chip, multiprotocol (SoC)
 ================================
 
-With the nRF devices supporting multiple wireless technologies, including IEEE 802.15.4 and Bluetooth Low Energy (Bluetooth LE), the application layer and the Zigbee and BLE stack run on the same processor.
+With the nRF devices supporting multiple wireless technologies, including IEEE 802.15.4 and Bluetooth Low Energy (Bluetooth LE), the application layer and the Zigbee and Bluetooth LE stack run on the same processor.
 
 This design has the following advantages:
 
@@ -59,9 +64,14 @@ It also has the following disadvantages:
 * Bluetooth LE activity can degradate the connectivity on Zigbee if not implemented with efficiency in mind.
 
 .. figure:: /images/zigbee_platform_design_multi.svg
-   :alt: Multiprotocol Zigbee and Bluetooth LE architecture
+   :alt: Multiprotocol Zigbee and Bluetooth LE architecture (nRF52 Series devices)
 
-   Multiprotocol Zigbee and Bluetooth LE architecture
+   Multiprotocol Zigbee and Bluetooth LE architecture on nRF52 Series devices
+
+.. figure:: /images/zigbee_platform_design_nRF5340_multi.svg
+   :alt: Multiprotocol Zigbee and Bluetooth LE architecture (nRF53 Series devices)
+
+   Multiprotocol Zigbee and Bluetooth LE architecture on nRF53 Series devices
 
 For more information, see :ref:`ug_multiprotocol_support` and :ref:`zigbee_light_switch_sample_nus`.
 
@@ -79,8 +89,8 @@ The split stack architectures are most commonly used to design a Zigbee gateway,
 Network Co-Processor (NCP)
 ==========================
 
-In this design, the host processor runs the Zigbee application layer (ZCL) and and the Zigbee commissioning logic.
-The connectivity device (nRF SoC) runs the NCP application that contains lower parts of the Zigbee stack (802.15.4 PHY/MAC and the Zigbee PRO network layer), as well as provides commands to execute BDB commissioning primitives.
+In this design, the host processor runs the Zigbee application layer (ZCL) and the Zigbee commissioning logic.
+The connectivity device (nRF SoC) runs the :ref:`NCP application <zigbee_ncp_sample>` that contains lower parts of the Zigbee stack (802.15.4 PHY/MAC and the Zigbee PRO network layer), as well as provides commands to execute BDB commissioning primitives.
 The host processor communicates with the NCP through a serial interface (USB or UART).
 
 .. figure:: /images/zigbee_platform_design_ncp.svg
@@ -88,7 +98,7 @@ The host processor communicates with the NCP through a serial interface (USB or 
 
    Split Zigbee architecture
 
-The |NCS|'s :ref:`ug_zigbee_tools` include the `NCP Host for Zigbee`_ based on ZBOSS and available for download as a standalone :file:`zip` package.
+The |NCS|'s :ref:`ug_zigbee_tools` include the `ZBOSS NCP Host`_ and available for download as a standalone :file:`zip` package.
 |zigbee_ncp_package|
 
 The NCP design has the following advantages:
@@ -102,4 +112,4 @@ The NCP design has the following advantages:
 It also has the following disadvantages:
 
 * The host part of the stack must be built and run for every individual host processor in use.
-  However, Nordic Semiconductor provides reference implementation for Linux-based platforms in the NCP Host for Zigbee package.
+  However, Nordic Semiconductor provides reference implementation for Linux-based platforms in the ZBOSS NCP Host package.

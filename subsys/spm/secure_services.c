@@ -5,12 +5,13 @@
  */
 #include <zephyr.h>
 #include <errno.h>
-#include <cortex_m/tz.h>
+#include <aarch32/cortex_m/tz.h>
 #include <power/reboot.h>
 #include <sys/util.h>
 #include <autoconf.h>
 #include <string.h>
 #include <bl_validation.h>
+#include <aarch32/cortex_m/cmse.h>
 
 #if USE_PARTITION_MANAGER
 #include <pm_config.h>
@@ -41,6 +42,10 @@
 #include <mbedtls/entropy_poll.h>
 #endif /* CONFIG_SPM_SERVICE_RNG */
 
+static bool ptr_in_secure_area(intptr_t ptr)
+{
+	return arm_cmse_addr_is_secure(ptr) == 1;
+}
 
 int spm_secure_services_init(void)
 {
@@ -48,6 +53,7 @@ int spm_secure_services_init(void)
 
 #ifdef CONFIG_SPM_SERVICE_RNG
 	mbedtls_platform_context platform_ctx = {0};
+
 	err = mbedtls_platform_setup(&platform_ctx);
 #endif
 	return err;
@@ -86,6 +92,10 @@ int spm_request_read_nse(void *destination, uint32_t addr, size_t len)
 		return -EINVAL;
 	}
 
+	if (ptr_in_secure_area((intptr_t)destination)) {
+		return -EINVAL;
+	}
+
 	for (size_t i = 0; i < ARRAY_SIZE(ranges); i++) {
 		uint32_t start = ranges[i].start;
 		uint32_t size = ranges[i].size;
@@ -114,7 +124,12 @@ void spm_request_system_reboot_nse(void)
 __TZ_NONSECURE_ENTRY_FUNC
 int spm_request_random_number_nse(uint8_t *output, size_t len, size_t *olen)
 {
-	int err;
+	int err = -EINVAL;
+
+	if (ptr_in_secure_area((intptr_t)output) ||
+	    ptr_in_secure_area((intptr_t)olen)) {
+		return -EINVAL;
+	}
 
 	if (len != MBEDTLS_ENTROPY_MAX_GATHER) {
 		return -EINVAL;
@@ -133,6 +148,10 @@ int spm_s0_active(uint32_t s0_address, uint32_t s1_address, bool *s0_active)
 	const struct fw_info *s1;
 	bool s0_valid;
 	bool s1_valid;
+
+	if (ptr_in_secure_area((intptr_t)s0_active)) {
+		return -EINVAL;
+	}
 
 	s0 = fw_info_find(s0_address);
 	s1 = fw_info_find(s1_address);
@@ -161,6 +180,16 @@ int spm_firmware_info_nse(uint32_t fw_address, struct fw_info *info)
 	const struct fw_info *tmp_info;
 
 	if (info == NULL) {
+		return -EINVAL;
+	}
+
+	/* Ensure that fw_address is within secure area */
+	if (!ptr_in_secure_area(fw_address)) {
+		return -EINVAL;
+	}
+
+	/* Ensure that *info is in non-secure RAM */
+	if (ptr_in_secure_area((intptr_t)info)) {
 		return -EINVAL;
 	}
 
@@ -196,3 +225,31 @@ void spm_busy_wait_nse(uint32_t busy_wait_us)
 	k_busy_wait(busy_wait_us);
 }
 #endif /* CONFIG_SPM_SERVICE_BUSY_WAIT */
+
+#if CONFIG_SPM_SERVICE_NS_HANDLER_FROM_SPM_FAULT
+#include <secure_services.h>
+
+static spm_ns_on_fatal_error_t ns_on_fatal_handler;
+
+__TZ_NONSECURE_ENTRY_FUNC
+int spm_set_ns_fatal_error_handler_nse(spm_ns_on_fatal_error_t handler)
+{
+	ns_on_fatal_handler = handler;
+
+	return 0;
+}
+
+void z_spm_ns_fatal_error_handler(void)
+{
+	if (!ns_on_fatal_handler) {
+		return;
+	}
+
+	TZ_NONSECURE_FUNC_PTR_DECLARE(fatal_handler_ns);
+	fatal_handler_ns = TZ_NONSECURE_FUNC_PTR_CREATE(ns_on_fatal_handler);
+
+	if (TZ_NONSECURE_FUNC_PTR_IS_NS(fatal_handler_ns)) {
+		fatal_handler_ns();
+	}
+}
+#endif /* CONFIG_SPM_SERVICE_NS_HANDLER_FROM_SPM_FAULT */

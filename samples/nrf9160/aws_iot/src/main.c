@@ -306,6 +306,9 @@ void aws_iot_event_handler(const struct aws_iot_evt *const evt)
 	case AWS_IOT_EVT_ERROR:
 		printk("AWS_IOT_EVT_ERROR, %d\n", evt->data.err);
 		break;
+	case AWS_IOT_EVT_FOTA_ERROR:
+		printk("AWS_IOT_EVT_FOTA_ERROR");
+		break;
 	default:
 		printk("Unknown AWS IoT event type: %d\n", evt->type);
 		break;
@@ -396,7 +399,7 @@ static void nrf_modem_lib_dfu_handler(void)
 {
 	int err;
 
-	err = nrf_modem_lib_init();
+	err = nrf_modem_lib_init(NORMAL_MODE);
 
 	switch (err) {
 	case MODEM_DFU_RESULT_OK:

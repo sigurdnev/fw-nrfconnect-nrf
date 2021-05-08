@@ -12,7 +12,6 @@
 #include <zephyr.h>
 #include <arch/cpu.h>
 #include <sys/byteorder.h>
-#include <logging/log.h>
 #include <sys/util.h>
 #include <drivers/ipm.h>
 
@@ -27,9 +26,9 @@
 
 #include <nrf_802154_serialization_error.h>
 
-#define LOG_LEVEL LOG_LEVEL_INFO
+#define BT_DBG_ENABLED 0
 #define LOG_MODULE_NAME hci_rpmsg
-LOG_MODULE_REGISTER(LOG_MODULE_NAME);
+#include "common/log.h"
 
 static int endpoint_id;
 
@@ -192,7 +191,7 @@ static int hci_rpmsg_send(struct net_buf *buf)
 #if defined(CONFIG_BT_CTLR_ASSERT_HANDLER)
 void bt_ctlr_assert_handle(char *file, uint32_t line)
 {
-	LOG_ERR("Controller assert in: %s at %d", file, line);
+	BT_ASSERT_MSG(false, "Controller assert in: %s at %d", file, line);
 }
 #endif /* CONFIG_BT_CTLR_ASSERT_HANDLER */
 
@@ -259,5 +258,9 @@ void nrf_802154_serialization_error(const nrf_802154_ser_err_data_t *err)
 	__ASSERT(false, "802.15.4 serialization error");
 }
 
+void nrf_802154_sl_fault_handler(uint32_t id, int32_t line, const char *err)
+{
+	__ASSERT(false, "module_id: %u, line: %d, %s", id, line, err);
+}
 
 SYS_INIT(register_endpoint, POST_KERNEL, CONFIG_RPMSG_SERVICE_EP_REG_PRIORITY);

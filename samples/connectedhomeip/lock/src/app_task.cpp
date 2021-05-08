@@ -14,18 +14,20 @@
 #include "nfc_widget.h"
 #endif
 
-#include "attribute-storage.h"
-#include "gen/attribute-id.h"
-#include "gen/attribute-type.h"
-#include "gen/cluster-id.h"
-
 #include <platform/CHIPDeviceLayer.h>
 
-#include <app/server/QRCodeUtil.h>
+#include <attribute-storage.h>
+#include <app/server/OnboardingCodesUtil.h>
 #include <app/server/Server.h>
+#include <gen/attribute-id.h>
+#include <gen/attribute-type.h>
+#include <gen/cluster-id.h>
+
 #include <dk_buttons_and_leds.h>
 #include <logging/log.h>
 #include <zephyr.h>
+
+#include <algorithm>
 
 using namespace ::chip::DeviceLayer;
 
@@ -45,8 +47,6 @@ NFCWidget sNFC;
 
 bool sIsThreadProvisioned;
 bool sIsThreadEnabled;
-bool sIsThreadAttached;
-bool sIsPairedToAccount;
 bool sHaveBLEConnections;
 bool sHaveServiceConnectivity;
 } /* namespace */
@@ -75,7 +75,7 @@ int AppTask::Init()
 	/* Init ZCL Data Model and start server */
 	InitServer();
 	ConfigurationMgr().LogDeviceConfig();
-	PrintQRCode(chip::RendezvousInformationFlags::kBLE);
+	PrintOnboardingCodes(chip::RendezvousInformationFlags::kBLE);
 
 #ifdef CONFIG_CHIP_NFC_COMMISSIONING
 	ret = sNFC.Init(ConnectivityMgr());
@@ -118,15 +118,10 @@ int AppTask::StartApp()
 		if (PlatformMgr().TryLockChipStack()) {
 			sIsThreadProvisioned = ConnectivityMgr().IsThreadProvisioned();
 			sIsThreadEnabled = ConnectivityMgr().IsThreadEnabled();
-			sIsThreadAttached = ConnectivityMgr().IsThreadAttached();
 			sHaveBLEConnections = (ConnectivityMgr().NumBLEConnections() != 0);
 			sHaveServiceConnectivity = ConnectivityMgr().HaveServiceConnectivity();
 			PlatformMgr().UnlockChipStack();
 		}
-
-		/* Consider the system to be "fully connected" if it has service
-		 * connectivity and it is able to interact with the service on a regular basis. */
-		bool isFullyConnected = sHaveServiceConnectivity;
 
 		/* Update the status LED.
 		 *
@@ -136,13 +131,13 @@ int AppTask::StartApp()
 		 * connectivity to the service OR subscriptions are not fully established
 		 * THEN blink the LED Off for a short period of time.
 		 *
-		 * If the system has ble connection(s) uptill the stage above, THEN blink the LEDs at an even
+		 * If the system has ble connection(s) uptill the stage above, THEN blink the LED at an even
 		 * rate of 100ms.
 		 *
-		 * Otherwise, blink the LED ON for a very short time. */
-		if (isFullyConnected) {
+		 * Otherwise, blink the LED On for a very short time. */
+		if (sHaveServiceConnectivity) {
 			sStatusLED.Set(true);
-		} else if (sIsThreadProvisioned && sIsThreadEnabled && sIsPairedToAccount) {
+		} else if (sIsThreadProvisioned && sIsThreadEnabled) {
 			sStatusLED.Blink(950, 50);
 		} else if (sHaveBLEConnections) {
 			sStatusLED.Blink(100, 100);
@@ -233,6 +228,10 @@ void AppTask::CompleteLockActionHandler()
 
 void AppTask::StartThreadHandler()
 {
+	if (AddTestPairing() != CHIP_NO_ERROR) {
+		LOG_ERR("Failed to add test pairing");
+	}
+
 	if (!ConnectivityMgr().IsThreadProvisioned()) {
 		StartDefaultThreadNetwork();
 		LOG_INF("Device is not commissioned to a Thread network. Starting with the default configuration");
@@ -243,8 +242,14 @@ void AppTask::StartThreadHandler()
 
 void AppTask::StartBLEAdvertisingHandler()
 {
+	if (chip::DeviceLayer::ConnectivityMgr().IsThreadProvisioned()) {
+		LOG_INF("NFC Tag emulation and BLE advertisement not started - device is commissioned to a Thread network.");
+		return;
+	}
+
+#ifdef CONFIG_CHIP_NFC_COMMISSIONING
 	if (!sNFC.IsTagEmulationStarted()) {
-		if (!(StartNFCTag() < 0)) {
+		if (!(GetAppTask().StartNFCTag() < 0)) {
 			LOG_INF("Started NFC Tag emulation");
 		} else {
 			LOG_ERR("Starting NFC Tag failed");
@@ -252,12 +257,17 @@ void AppTask::StartBLEAdvertisingHandler()
 	} else {
 		LOG_INF("NFC Tag emulation is already started");
 	}
+#endif
 
-	if (!ConnectivityMgr().IsBLEAdvertisingEnabled()) {
-		ConnectivityMgr().SetBLEAdvertisingEnabled(true);
-		LOG_INF("Enabled BLE Advertising");
+	if (ConnectivityMgr().IsBLEAdvertisingEnabled()) {
+		LOG_INF("BLE Advertisement is already enabled");
+		return;
+	}
+
+	if (OpenDefaultPairingWindow(chip::ResetAdmins::kNo) == CHIP_NO_ERROR) {
+		LOG_INF("Enabled BLE Advertisement");
 	} else {
-		LOG_INF("BLE Advertising is already enabled");
+		LOG_ERR("OpenDefaultPairingWindow() failed");
 	}
 }
 
@@ -268,8 +278,9 @@ int AppTask::StartNFCTag()
 	std::string QRCode;
 
 	int result = GetQRCode(QRCode, chip::RendezvousInformationFlags::kBLE);
-
 	VerifyOrExit(!result, ChipLogError(AppServer, "Getting QR code payload failed"));
+
+	std::replace(QRCode.begin(), QRCode.end(), ' ', '_');
 
 	result = sNFC.StartTagEmulation(QRCode.c_str(), QRCode.size());
 	VerifyOrExit(result >= 0, ChipLogError(AppServer, "Starting NFC Tag emulation failed"));

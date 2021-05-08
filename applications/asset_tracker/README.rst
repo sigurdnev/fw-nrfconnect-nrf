@@ -7,8 +7,11 @@ nRF9160: Asset Tracker
    :local:
    :depth: 2
 
-The Asset Tracker demonstrates how to use the :ref:`lib_nrf_cloud` to connect an nRF9160-based kit to the `nRF Connect for Cloud`_ via LTE, transmit GPS and sensor data, and retrieve information about the device.
+.. note::
+   The Asset Tracker application is succeeded by the :ref:`asset_tracker_v2` application.
+   It will be phased out in future releases.
 
+The Asset Tracker demonstrates how to use the :ref:`lib_nrf_cloud` to connect an nRF9160-based kit to the `nRF Connect for Cloud`_ via LTE, transmit GPS and sensor data, and retrieve information about the device.
 
 Overview
 ********
@@ -176,6 +179,14 @@ In |SES|, select :guilabel:`Tools` -> :guilabel:`Options` -> :guilabel:`nRF Conn
 See :ref:`cmake_options` for more information.
 
 Alternatively, you can manually set the configuration options to match the contents of the overlay config file.
+
+Using nRF Cloud FOTA
+********************
+
+You can add the nRF Cloud FOTA update functionality to the application through the :ref:`lib_nrf_cloud` library.
+The FOTA functionality is automatically enabled when you include the nRF Cloud library.
+For more information, see :ref:`lib_nrf_cloud_fota`.
+
 
 Building and running
 ********************

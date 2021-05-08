@@ -281,6 +281,9 @@ static void aws_iot_notify_event(const struct aws_iot_evt *aws_iot_evt)
 	case AWS_IOT_EVT_ERROR:
 		cloud_evt.data.err = aws_iot_evt->data.err;
 		cloud_evt.type = CLOUD_EVT_ERROR;
+	case AWS_IOT_EVT_FOTA_ERROR:
+		cloud_evt.type = CLOUD_EVT_FOTA_ERROR;
+		cloud_evt.data.err = aws_iot_evt->data.err;
 		break;
 	case AWS_IOT_EVT_FOTA_DL_PROGRESS:
 		cloud_evt.type = CLOUD_EVT_FOTA_DL_PROGRESS;
@@ -330,7 +333,7 @@ static void aws_fota_cb_handler(struct aws_fota_event *fota_evt)
 		break;
 	case AWS_FOTA_EVT_ERROR:
 		LOG_ERR("AWS_FOTA_EVT_ERROR");
-		aws_iot_evt.type = AWS_IOT_EVT_ERROR;
+		aws_iot_evt.type = AWS_IOT_EVT_FOTA_ERROR;
 		break;
 	case AWS_FOTA_EVT_DL_PROGRESS:
 		LOG_DBG("AWS_FOTA_EVT_DL_PROGRESS, (%d%%)",
@@ -656,16 +659,9 @@ static void mqtt_evt_handler(struct mqtt_client *const c,
 		return;
 	} else if (err < 0) {
 		LOG_ERR("aws_fota_mqtt_evt_handler, error: %d", err);
-		LOG_DBG("Disconnecting MQTT client...");
-
-		atomic_set(&disconnect_requested, 1);
-		err = mqtt_disconnect(c);
-		if (err) {
-			LOG_ERR("Could not disconnect: %d", err);
-			aws_iot_evt.type = AWS_IOT_EVT_ERROR;
-			aws_iot_evt.data.err = err;
-			aws_iot_notify_event(&aws_iot_evt);
-		}
+		aws_iot_evt.type = AWS_IOT_EVT_FOTA_ERROR;
+		aws_iot_evt.data.err = err;
+		aws_iot_notify_event(&aws_iot_evt);
 	}
 #endif
 
@@ -689,7 +685,8 @@ static void mqtt_evt_handler(struct mqtt_client *const c,
 		aws_iot_evt.type = AWS_IOT_EVT_CONNECTED;
 		aws_iot_notify_event(&aws_iot_evt);
 
-		if (!mqtt_evt->param.connack.session_present_flag) {
+		if (!mqtt_evt->param.connack.session_present_flag ||
+		    IS_ENABLED(CONFIG_MQTT_CLEAN_SESSION)) {
 			err = topic_subscribe();
 
 			if (err < 0) {
@@ -975,15 +972,9 @@ static int client_broker_init(struct mqtt_client *const client)
 	tls_cfg->sec_tag_count		= ARRAY_SIZE(sec_tag_list);
 	tls_cfg->sec_tag_list		= sec_tag_list;
 	tls_cfg->hostname		= CONFIG_AWS_IOT_BROKER_HOST_NAME;
-
-#if defined(CONFIG_NRF_MODEM_LIB)
-	tls_cfg->session_cache		=
-		IS_ENABLED(CONFIG_AWS_IOT_TLS_SESSION_CACHING) ?
-			TLS_SESSION_CACHE_ENABLED : TLS_SESSION_CACHE_DISABLED;
-#else
-	/* TLS session caching is not supported by the Zephyr network stack */
 	tls_cfg->session_cache = TLS_SESSION_CACHE_DISABLED;
 
+#if !defined(CONFIG_NRF_MODEM_LIB)
 	err = certificates_provision();
 	if (err) {
 		LOG_ERR("Could not provision certificates, error: %d", err);
@@ -1156,6 +1147,12 @@ int aws_iot_init(const struct aws_iot_config *const config,
 	int err;
 
 	if (IS_ENABLED(CONFIG_AWS_IOT_CLIENT_ID_APP) &&
+		config == NULL) {
+		LOG_ERR("config is NULL");
+		return -EINVAL;
+	}
+
+	if (IS_ENABLED(CONFIG_AWS_IOT_CLIENT_ID_APP) &&
 	    config->client_id_len >= CONFIG_AWS_IOT_CLIENT_ID_MAX_LEN) {
 		LOG_ERR("Client ID string too long");
 		return -EMSGSIZE;
@@ -1167,7 +1164,12 @@ int aws_iot_init(const struct aws_iot_config *const config,
 		return -ENODATA;
 	}
 
-	err = aws_iot_topics_populate(config->client_id, config->client_id_len);
+	if (IS_ENABLED(CONFIG_AWS_IOT_CLIENT_ID_APP)) {
+		err = aws_iot_topics_populate(config->client_id, config->client_id_len);
+	} else {
+		err = aws_iot_topics_populate(NULL, 0);
+	}
+
 	if (err) {
 		LOG_ERR("aws_topics_populate, error: %d", err);
 		return err;

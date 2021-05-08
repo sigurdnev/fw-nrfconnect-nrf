@@ -156,6 +156,7 @@ enum gps_agps_type {
 	GPS_AGPS_ALMANAC			= 3,
 	GPS_AGPS_KLOBUCHAR_CORRECTION		= 4,
 	GPS_AGPS_NEQUICK_CORRECTION		= 5,
+	GPS_AGPS_GPS_TOWS			= 6, /* nrfcloud request only */
 	GPS_AGPS_GPS_SYSTEM_CLOCK_AND_TOWS	= 7,
 	GPS_AGPS_LOCATION			= 8,
 	GPS_AGPS_INTEGRITY			= 9,
@@ -427,6 +428,14 @@ int gps_agps_request(struct gps_agps_request request, int socket);
  * @return Zero on success or (negative) error code otherwise.
  */
 int gps_process_agps_data(const uint8_t *buf, size_t len);
+
+/**@brief Gets most recent location from cell-based location request.
+ *
+ * @param lat Pointer where last cell-based latitude is to be copied.
+ * @param lon Pointer where last cell-based longitude is to be copied.
+ * @return 0 if successful, otherwise a (negative) error code.
+ */
+int gps_get_last_cell_location(double *const lat, double *const lon);
 
 #ifdef __cplusplus
 }

@@ -44,11 +44,17 @@ enum rx_state {
 	/* RX is in low power, idle state with pin detection armed. */
 	RX_IDLE,
 
+	/* RX request is pending, recevier is in preparation. */
+	RX_PREPARE,
+
 	/* RX is in active state, receiver is running. */
 	RX_ACTIVE,
 
 	/* RX is transitioning to from active idle state. */
 	RX_TO_IDLE,
+
+	/* RX is waiting for a new buffer. */
+	RX_BLOCKED,
 
 	/* RX is transitioning to off state. */
 	RX_TO_OFF,
@@ -247,6 +253,8 @@ static void rx_hfclk_request(struct lpuart_data *data)
 
 static void start_rx_activation(struct lpuart_data *data)
 {
+	data->rx_state = RX_PREPARE;
+
 	if (IS_ENABLED(CONFIG_NRF_SW_LPUART_HFXO_ON_RX)) {
 		rx_hfclk_request(data);
 	} else {
@@ -281,7 +289,7 @@ static void deactivate_rx(struct lpuart_data *data)
 	/* abort rx */
 	data->rx_state = RX_TO_IDLE;
 	err = uart_rx_disable(data->uart);
-	if (err < 0) {
+	if (err < 0 && err != -EFAULT) {
 		LOG_ERR("RX: Failed to disable (err: %d)", err);
 	}
 }
@@ -476,16 +484,18 @@ static void uart_callback(const struct device *uart, struct uart_event *evt,
 
 	case UART_RX_DISABLED:
 		LOG_DBG("Rx disabled");
-		__ASSERT_NO_MSG((data->rx_state != RX_ACTIVE) &&
-			 (data->rx_state != RX_IDLE) &&
+		__ASSERT_NO_MSG((data->rx_state != RX_IDLE) &&
 			 (data->rx_state != RX_OFF));
 
 		if (data->rx_state == RX_TO_IDLE) {
+			data->rx_state = RX_BLOCKED;
 			/* Need to request new buffer since uart was disabled */
 			evt->type = UART_RX_BUF_REQUEST;
-		} else if (data->rx_state == RX_TO_OFF) {
+		} else {
+			data->rx_buf = NULL;
 			data->rx_state = RX_OFF;
 		}
+
 		user_callback(dev, evt);
 		break;
 	case UART_RX_STOPPED:
@@ -625,7 +635,7 @@ static int api_rx_buf_rsp(const struct device *dev, uint8_t *buf, size_t len)
 	__ASSERT_NO_MSG((data->rx_state != RX_OFF) &&
 		 (data->rx_state != RX_TO_OFF));
 
-	if (data->rx_state == RX_TO_IDLE) {
+	if (data->rx_state == RX_TO_IDLE || data->rx_state == RX_BLOCKED) {
 		data->rx_buf = buf;
 		data->rx_len = len;
 
@@ -730,11 +740,6 @@ static int api_fifo_read(const struct device *dev,
 		       &data->int_driven.rxbuf[data->int_driven.rxrd],
 		       cpylen);
 		data->int_driven.rxrd += cpylen;
-		if ((data->rx_state == RX_IDLE)
-		    && !int_driven_rd_available(data)) {
-			/* Whole packet read, RX can be re-enabled. */
-			int_driven_rx_feed(dev, data);
-		}
 	}
 
 	return cpylen;
@@ -807,6 +812,16 @@ static void api_irq_rx_enable(const struct device *dev)
 	data->int_driven.rx_enabled = true;
 	if (int_driven_rd_available(data)) {
 		data->int_driven.callback(dev, data->int_driven.user_data);
+	}
+
+	/* If RX was disabled and there were pending data, it may have been
+	 * processed above after re-enabling. If whole data has been processed
+	 * we must feed the buffer back to the uart to allow reception of the
+	 * next packet.
+	 */
+	if (!int_driven_rd_available(data) && data->rx_state == RX_BLOCKED) {
+		/* Whole packet read, RX can be re-enabled. */
+		int_driven_rx_feed(dev, data);
 	}
 }
 

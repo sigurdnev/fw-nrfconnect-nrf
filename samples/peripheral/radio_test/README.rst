@@ -1,13 +1,13 @@
 .. _radio_test:
 
-Radio Test
+Radio test
 ##########
 
 .. contents::
    :local:
    :depth: 2
 
-The Radio Test sample demonstrates how to configure the radio in a specific mode and then test its performance.
+The Radio test sample demonstrates how to configure the radio in a specific mode and then test its performance.
 The sample provides a set of predefined commands that allow you to configure the radio in three modes:
 
 * Constant RX or TX carrier
@@ -59,9 +59,9 @@ The sample also requires one of the following testing devices:
 nRF21540 front-end module
 =========================
 
-.. |fem_file_path| replace:: :file:`samples/peripheral/radio_test`
+.. |fem_file_path| replace:: :file:`samples/peripheral/radio_test/configuration`
 
-.. include:: /includes/sample_fem_support.txt
+.. include:: /includes/sample_dtm_radio_test_fem.txt
 
 The nRF21540 transmitted power gain, antenna and an activation delay can be configured using the user interface :ref:`radio_test_ui`.
 
@@ -134,7 +134,7 @@ Building and running
 .. include:: /includes/build_and_run.txt
 
 .. note::
-   On the |nRF5340DKnoref|, the Radio Test sample is a standalone network sample that does not require any counterpart application sample.
+   On the |nRF5340DKnoref|, the Radio test sample is a standalone network sample that does not require any counterpart application sample.
    However, you must still program the application core to boot up the network core.
    You can use any sample for this, for example :ref:`nrf5340_empty_app_core`.
 

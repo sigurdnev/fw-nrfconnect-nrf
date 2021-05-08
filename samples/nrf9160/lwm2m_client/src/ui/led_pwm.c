@@ -130,7 +130,7 @@ static void work_handler(struct k_work *work)
 		int32_t next_delay =
 			leds.effect->steps[leds.effect_step].substep_time;
 
-		k_delayed_work_submit(&leds.work, next_delay);
+		k_delayed_work_submit(&leds.work, K_MSEC(next_delay));
 	}
 }
 
@@ -152,7 +152,7 @@ static void led_update(struct led *led)
 		int32_t next_delay =
 			led->effect->steps[led->effect_step].substep_time;
 
-		k_delayed_work_submit(&led->work, next_delay);
+		k_delayed_work_submit(&led->work, K_MSEC(next_delay));
 	} else {
 		LOG_DBG("LED effect with no effect");
 	}
@@ -180,7 +180,7 @@ int ui_leds_init(void)
 
 void ui_leds_start(void)
 {
-#ifdef CONFIG_DEVICE_POWER_MANAGEMENT
+#ifdef CONFIG_PM_DEVICE
 	int err = device_set_power_state(leds.pwm_dev,
 						DEVICE_PM_ACTIVE_STATE,
 						NULL, NULL);
@@ -194,7 +194,7 @@ void ui_leds_start(void)
 void ui_leds_stop(void)
 {
 	k_delayed_work_cancel(&leds.work);
-#ifdef CONFIG_DEVICE_POWER_MANAGEMENT
+#ifdef CONFIG_PM_DEVICE
 	int err = device_set_power_state(leds.pwm_dev,
 					 DEVICE_PM_SUSPEND_STATE,
 					 NULL, NULL);

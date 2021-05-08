@@ -112,7 +112,7 @@ nRF9160
   * :ref:`cloud_client` - shows how to connect to and communicate with a cloud service using the generic :ref:`cloud_api_readme`.
   * :ref:`https_client` - shows how to provision a TLS certificate and connect to an HTTPS server.
   * :ref:`serial_lte_modem` - demonstrates sending AT commands between a host and a client device.
-    The sample is an enhancement to the :ref:`at_client_sample` sample.
+    The sample is an enhancement to the nRF9160: AT Client sample.
 
 * Added the following libraries:
 
@@ -428,7 +428,7 @@ MCUboot
   * New swap method that removes the need for a scratch partition
   * Bug fixes
 
-  See the `MCUboot release notes <https://github.com/JuulLabs-OSS/mcuboot/blob/master/docs/release-notes.md#version-150>`_ for more information.
+  See the `MCUboot release notes <https://github.com/mcu-tools/mcuboot/blob/master/docs/release-notes.md#user-content-version-150>`_ for more information.
   Note that not all features from v1.5.0 are included.
 
 Documentation

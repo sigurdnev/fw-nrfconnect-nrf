@@ -4,6 +4,14 @@
 # SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 #
 
+if (CONFIG_PARTITION_MANAGER_ENABLED)
+  if (NOT CONFIG_FLASH_MAP_CUSTOM)
+    message(FATAL_ERROR "CONFIG_FLASH_MAP_CUSTOM must be set when \
+      CONFIG_PARTITION_MANAGER_ENABLED is set")
+  endif()
+  zephyr_sources(flash_map_partition_manager.c)
+endif()
+
 function(preprocess_pm_yml in_file out_file)
   execute_process(
     COMMAND ${CMAKE_C_COMPILER}
@@ -71,6 +79,10 @@ endif()
 
 if (CONFIG_BUILD_WITH_TFM)
   ncs_add_partition_manager_config(pm.yml.tfm)
+endif()
+
+if (CONFIG_TRUSTED_EXECUTION_NONSECURE OR CONFIG_TRUSTED_EXECUTION_SECURE)
+  ncs_add_partition_manager_config(pm.yml.trustzone)
 endif()
 
 # We are using partition manager if we are a child image or if we are

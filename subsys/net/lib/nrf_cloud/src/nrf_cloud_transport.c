@@ -193,7 +193,7 @@ static void dc_endpoint_reset(void)
 }
 
 /* Get the next unused message id. */
-static uint32_t dc_get_next_message_id(void)
+static uint32_t get_next_message_id(void)
 {
 	nct.message_id++;
 
@@ -255,7 +255,7 @@ static uint32_t dc_send(const struct nct_dc_data *dc_data, uint8_t qos)
 	if (dc_data->id != 0) {
 		publish.message_id = dc_data->id;
 	} else {
-		publish.message_id = dc_get_next_message_id();
+		publish.message_id = get_next_message_id();
 	}
 
 	return mqtt_publish(&nct.client, &publish);
@@ -556,8 +556,23 @@ static void nrf_cloud_fota_cb_handler(const struct nrf_cloud_fota_evt
 		break;
 	}
 	case NRF_CLOUD_FOTA_EVT_DONE: {
+		enum nrf_cloud_fota_type fota_type;
+		struct nrf_cloud_evt cloud_evt = {
+			.type = NRF_CLOUD_EVT_FOTA_DONE,
+		};
+
 		LOG_DBG("NRF_CLOUD_FOTA_EVT_DONE: rebooting");
-		nct_apply_update();
+
+		if (evt) {
+			fota_type = evt->type;
+			cloud_evt.data.ptr = &fota_type;
+			cloud_evt.data.len = sizeof(fota_type);
+		} else {
+			cloud_evt.data.ptr = NULL;
+			cloud_evt.data.len = 0;
+		}
+
+		nct_apply_update(&cloud_evt);
 		break;
 	}
 	case NRF_CLOUD_FOTA_EVT_ERROR: {
@@ -957,8 +972,6 @@ int nct_cc_connect(void)
 
 int nct_cc_send(const struct nct_cc_data *cc_data)
 {
-	static uint32_t msg_id;
-
 	if (cc_data == NULL) {
 		LOG_ERR("cc_data == NULL");
 		return -EINVAL;
@@ -983,7 +996,7 @@ int nct_cc_send(const struct nct_cc_data *cc_data)
 		publish.message.payload.len = cc_data->data.len;
 	}
 
-	publish.message_id = cc_data->id ? cc_data->id : ++msg_id;
+	publish.message_id = cc_data->id ? cc_data->id : get_next_message_id();
 
 	LOG_DBG("mqtt_publish: id = %d opcode = %d len = %d", publish.message_id,
 		cc_data->opcode, cc_data->data.len);
