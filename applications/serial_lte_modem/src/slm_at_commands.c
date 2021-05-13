@@ -53,7 +53,7 @@ enum shutdown_modes {
 typedef int (*slm_at_handler_t) (enum at_cmd_type);
 
 static struct slm_work_info {
-	struct k_delayed_work work;
+	struct k_work_delayable work;
 	uint32_t data;
 } slm_work;
 
@@ -119,7 +119,7 @@ static int handle_at_sleep(enum at_cmd_type type)
 		uint16_t shutdown_mode = SHUTDOWN_MODE_IDLE;
 
 		if (at_params_valid_count_get(&at_param_list) > 1) {
-			ret = at_params_short_get(&at_param_list, 1, &shutdown_mode);
+			ret = at_params_unsigned_short_get(&at_param_list, 1, &shutdown_mode);
 			if (ret < 0) {
 				return -EINVAL;
 			}
@@ -197,7 +197,7 @@ static int handle_at_slmuart(enum at_cmd_type type)
 		uint32_t baudrate = 115200;
 
 		if (at_params_valid_count_get(&at_param_list) > 1) {
-			ret = at_params_int_get(&at_param_list, 1, &baudrate);
+			ret = at_params_unsigned_int_get(&at_param_list, 1, &baudrate);
 			if (ret) {
 				LOG_ERR("AT parameter error");
 				return -EINVAL;
@@ -217,9 +217,8 @@ static int handle_at_slmuart(enum at_cmd_type type)
 		case 460800:
 		case 921600:
 		case 1000000:
-			k_delayed_work_init(&slm_work.work, set_uart_wk);
 			slm_work.data = baudrate;
-			k_delayed_work_submit(&slm_work.work, K_MSEC(50));
+			k_work_reschedule(&slm_work.work, K_MSEC(50));
 			ret = 0;
 			break;
 		default:
@@ -257,11 +256,11 @@ static int handle_at_datactrl(enum at_cmd_type cmd_type)
 
 	switch (cmd_type) {
 	case AT_CMD_TYPE_SET_COMMAND:
-		ret = at_params_short_get(&at_param_list, 1, &size_limit);
+		ret = at_params_unsigned_short_get(&at_param_list, 1, &size_limit);
 		if (ret) {
 			return ret;
 		}
-		ret = at_params_short_get(&at_param_list, 2, &time_limit);
+		ret = at_params_unsigned_short_get(&at_param_list, 2, &time_limit);
 		if (ret) {
 			return ret;
 		}
@@ -467,6 +466,8 @@ int slm_at_parse(const char *at_cmd)
 int slm_at_init(void)
 {
 	int err;
+
+	k_work_init_delayable(&slm_work.work, set_uart_wk);
 
 	err = slm_at_tcp_proxy_init();
 	if (err) {
